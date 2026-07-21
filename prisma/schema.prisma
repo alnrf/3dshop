@@ -1,0 +1,242 @@
+// Loja de impressões 3D — schema multi-tenant (modelo A / white-label).
+// Uma loja hoje (a sua) = primeiro registro em Store. Cada tabela de negócio
+// carrega storeId, então adicionar lojas depois não muda a forma das queries.
+// Valores monetários em centavos (Int), nunca Float.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Tenant + acesso ──────────────────────────────────────────────────────────
+
+model Store {
+  id     String @id @default(cuid())
+  slug   String @unique // usado no path/subdomínio: /loja/<slug>
+  name   String
+  plan   String @default("free")   // free | pro | ...
+  status String @default("active") // active | suspended
+
+  // Credenciais do gateway DESTA loja (modelo A: cada loja recebe na própria conta).
+  // Preferir OAuth/Connect a chave crua; o que for guardado vai ENCRIPTADO em repouso.
+  paymentConfig Json?
+
+  memberships Membership[]
+  products    Product[]
+  customers   Customer[]
+  carts       Cart[]
+  orders      Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Operadores do painel (você e assinantes). Distinto de Customer (comprador).
+model User {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  name         String?
+  platformRole String? // null = comum; "admin" = dono da plataforma (você)
+
+  memberships Membership[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum MemberRole {
+  owner
+  staff
+}
+
+model Membership {
+  id      String     @id @default(cuid())
+  userId  String
+  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storeId String
+  store   Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  role    MemberRole @default(owner)
+
+  @@unique([userId, storeId]) // um vínculo por par usuário/loja
+  @@index([storeId])
+}
+
+// ─── Catálogo ────────────────────────────────────────────────────────────────
+
+model Product {
+  id          String  @id @default(cuid())
+  storeId     String
+  store       Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  slug        String
+  name        String
+  description String?
+  material    String? // ex.: PLA, PETG, resina
+  printTime   String? // ex.: "cerca de 4 horas"
+  priceCents  Int
+  stock       Int     @default(0)
+  active      Boolean @default(true)
+
+  // Necessários para cotar frete
+  weightGrams Int
+  widthCm     Int
+  heightCm    Int
+  lengthCm    Int
+
+  images     ProductImage[]
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, slug]) // slug único por loja, não globalmente
+  @@index([storeId, active])
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  r2Key     String
+  position  Int     @default(0)
+
+  @@index([productId])
+}
+
+// ─── Compradores (por loja) ───────────────────────────────────────────────────
+
+model Customer {
+  id        String  @id @default(cuid())
+  storeId   String
+  store     Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name      String
+  email     String
+  phone     String?
+  addresses Json?
+
+  cart   Cart?
+  orders Order[]
+
+  @@unique([storeId, email]) // mesmo e-mail pode existir em lojas diferentes
+  @@index([storeId])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Carrinho ────────────────────────────────────────────────────────────────
+
+model Cart {
+  id         String    @id @default(cuid())
+  storeId    String
+  store      Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  token      String    @unique @default(cuid()) // cookie cart_token (convidado)
+  customerId String?   @unique                  // null = convidado
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  items CartItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([storeId])
+}
+
+model CartItem {
+  id        String  @id @default(cuid())
+  cartId    String
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  qty       Int     @default(1)
+
+  @@unique([cartId, productId])
+  @@index([cartId])
+}
+
+// ─── Pedidos ─────────────────────────────────────────────────────────────────
+
+enum PaymentStatus {
+  pending
+  approved
+  rejected
+  refunded
+}
+
+enum FulfillmentStatus {
+  awaiting_payment
+  paid
+  printing
+  shipped
+  delivered
+  canceled
+}
+
+// Suporta a encomenda com sinal: deposit (sinal) + balance (saldo), ou full.
+enum PaymentKind {
+  full
+  deposit
+  balance
+}
+
+model Order {
+  id         String   @id @default(cuid())
+  storeId    String
+  store      Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  subtotalCents Int
+  shippingCents Int @default(0)
+  totalCents    Int
+
+  paymentStatus     PaymentStatus     @default(pending)
+  fulfillmentStatus FulfillmentStatus @default(awaiting_payment)
+
+  shippingAddress    Json
+  trackingCode       String?
+  melhorEnvioOrderId String?
+
+  items    OrderItem[]
+  payments Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([storeId, fulfillmentStatus])
+  @@index([customerId])
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  qty       Int
+
+  unitPriceCents Int // preço congelado no momento da compra
+
+  @@index([orderId])
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  orderId           String
+  order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  kind              PaymentKind   @default(full) // sinal / saldo / integral
+  provider          String        @default("mercadopago")
+  providerPaymentId String?       @unique
+  amountCents       Int
+  status            PaymentStatus @default(pending)
+  rawPayload        Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+}
