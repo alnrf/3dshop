@@ -7,7 +7,7 @@ import { ProductCard } from "./product-card";
 
 export default async function VitrinePage() {
   // withStore resolve o tenant e roda a query no contexto (extensão aplica storeId).
-  const products = await withStore(() =>
+  const products = await withStore(async () =>
     prisma.product.findMany({
       where: { active: true },
       orderBy: { createdAt: "desc" },

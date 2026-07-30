@@ -52,6 +52,16 @@ export async function resolveStore(slug: string) {
   return store;
 }
 
+/** Login por credencial ainda com a senha provisória — precisa trocar antes de usar o admin. */
+export class PasswordChangeRequiredError extends Error {}
+
+/** Loja existe e tem Membership, mas não está `active` (onboarding pendente ou suspensa). */
+export class StoreNotActiveError extends Error {
+  constructor(public status: string) {
+    super(`Loja com status "${status}"`);
+  }
+}
+
 /**
  * Loja ativa do operador no admin. Com loja única, é a primeira Membership.
  * No futuro multi-loja, troque pela loja selecionada (cookie/seletor).
@@ -63,11 +73,17 @@ export async function getActiveStoreId(): Promise<string> {
 
   const user = await prisma.user.findUnique({
     where: { email },
-    include: { memberships: { take: 1, orderBy: { store: { createdAt: "asc" } } } },
+    include: {
+      memberships: { take: 1, orderBy: { store: { createdAt: "asc" } }, include: { store: true } },
+    },
   });
-  const storeId = user?.memberships[0]?.storeId;
-  if (!storeId) throw new Error("Operador sem loja vinculada");
-  return storeId;
+  const membership = user?.memberships[0];
+  if (!user || !membership) throw new Error("Operador sem loja vinculada");
+
+  if (user.mustChangePassword) throw new PasswordChangeRequiredError();
+  if (membership.store.status !== "active") throw new StoreNotActiveError(membership.store.status);
+
+  return membership.storeId;
 }
 
 /**

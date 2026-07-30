@@ -11,7 +11,7 @@ export default async function EditarProduto({
 }) {
   const { id } = await params;
   const storeId = await getActiveStoreId();
-  const product = await runWithStore(storeId, () =>
+  const product = await runWithStore(storeId, async () =>
     prisma.product.findUnique({ where: { id }, include: { images: true } }),
   );
   if (!product) notFound(); // inclui o caso "produto de outra loja" (extensão devolve null)

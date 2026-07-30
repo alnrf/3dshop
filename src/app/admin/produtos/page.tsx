@@ -13,7 +13,7 @@ import {
 
 export default async function ProdutosAdminPage() {
   const storeId = await getActiveStoreId(); // acesso já barrado no layout
-  const products = await runWithStore(storeId, () =>
+  const products = await runWithStore(storeId, async () =>
     prisma.product.findMany({
       orderBy: { createdAt: "desc" }, // extensão injeta o storeId
       include: { images: { orderBy: { position: "asc" }, take: 1 } },

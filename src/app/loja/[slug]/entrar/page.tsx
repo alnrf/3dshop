@@ -1,8 +1,10 @@
 // app/loja/[slug]/entrar/page.tsx
 import { redirect } from "next/navigation";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { auth, signIn } from "@/auth";
 import { currentStore } from "@/lib/tenant";
+import { LoginForm } from "./login-form";
 
 export default async function EntrarPage() {
   const store = await currentStore();
@@ -24,13 +26,28 @@ export default async function EntrarPage() {
       <p className="mt-2 text-sm text-stone-500">
         Seu carrinho será mantido ao entrar.
       </p>
-      <form action={loginGoogle} className="mt-8">
+
+      <div className="mt-8">
+        <LoginForm storeSlug={store.slug} base={base} />
+      </div>
+
+      <div className="mt-6 flex items-center gap-3 text-xs text-stone-400">
+        <span className="h-px flex-1 bg-stone-200" />
+        ou
+        <span className="h-px flex-1 bg-stone-200" />
+      </div>
+
+      <form action={loginGoogle} className="mt-6">
         <button className="h-12 w-full rounded-lg border border-stone-300 bg-white text-sm font-medium hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
           Continuar com Google
         </button>
       </form>
+
       <p className="mt-6 text-xs text-stone-400">
-        Login com e-mail/senha, Apple e Facebook: em breve.
+        Ainda não tem conta?{" "}
+        <Link href={`${base}/registrar`} className="underline-offset-2 hover:underline">
+          Cadastre-se
+        </Link>
       </p>
     </main>
   );

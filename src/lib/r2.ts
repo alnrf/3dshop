@@ -25,9 +25,9 @@ export function r2Url(key?: string) {
  * URL assinada para o browser fazer PUT direto no bucket (não passa pelo server).
  * Requer CORS no bucket permitindo PUT a partir do domínio da loja.
  */
-export async function createUploadUrl(contentType: string) {
+export async function createUploadUrl(contentType: string, folder: string = "products") {
   const ext = contentType.split("/")[1] ?? "bin";
-  const key = `products/${crypto.randomUUID()}.${ext}`;
+  const key = `${folder}/${crypto.randomUUID()}.${ext}`;
   const url = await getSignedUrl(
     s3,
     new PutObjectCommand({ Bucket: BUCKET, Key: key, ContentType: contentType }),

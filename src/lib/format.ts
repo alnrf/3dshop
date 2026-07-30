@@ -7,3 +7,13 @@ export function formatBRL(cents: number): string {
     currency: "BRL",
   });
 }
+
+/** Normaliza texto livre num slug de URL. Ex.: "Vaso Geométrico" -> "vaso-geometrico" */
+export function slugify(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}

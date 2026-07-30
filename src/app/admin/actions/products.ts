@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { requireStoreAccess, getActiveStoreId } from "@/lib/tenant";
 import { runWithStore } from "@/lib/tenant-context";
 import { createUploadUrl } from "@/lib/r2";
+import { slugify } from "@/lib/format";
 
 const ProductSchema = z.object({
   name: z.string().min(1, "Informe o nome"),
@@ -26,15 +27,6 @@ const ProductSchema = z.object({
 
 export type ProductInput = z.input<typeof ProductSchema>;
 export type ProductResult = { ok: true; id: string } | { ok: false; error: string };
-
-function slugify(s: string) {
-  return s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
 
 function revalidateProducts() {
   revalidatePath("/admin/produtos");

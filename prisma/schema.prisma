@@ -18,12 +18,21 @@ model Store {
   id     String @id @default(cuid())
   slug   String @unique // usado no path/subdomínio: /loja/<slug>
   name   String
-  plan   String @default("free")   // free | pro | ...
-  status String @default("active") // active | suspended
+  plan   String @default("free") // free | pro | ...
+  status String @default("active") // pending (aguardando aprovação) | active | suspended
+
+  // Aceite do contrato de serviço no onboarding self-service.
+  contractAcceptedAt DateTime?
 
   // Credenciais do gateway DESTA loja (modelo A: cada loja recebe na própria conta).
   // Preferir OAuth/Connect a chave crua; o que for guardado vai ENCRIPTADO em repouso.
-  paymentConfig Json?
+  paymentConfig  Json?
+  // Credenciais/preferência de frete DESTA loja (Superfrete, Melhor Envio, ...).
+  // Mesma regra: segredo vai ENCRIPTADO em repouso (ver lib/crypto.ts).
+  shippingConfig Json?
+
+  // Logotipo exibido no navbar do storefront (R2, mesmo padrão do ProductImage.r2Key).
+  logoKey String?
 
   memberships Membership[]
   products    Product[]
@@ -41,6 +50,10 @@ model User {
   email        String  @unique
   name         String?
   platformRole String? // null = comum; "admin" = dono da plataforma (você)
+
+  // Login por credencial (onboarding self-service). Google não usa nenhum dos dois.
+  passwordHash       String?
+  mustChangePassword Boolean @default(false)
 
   memberships Membership[]
 
@@ -118,14 +131,17 @@ model Customer {
   phone     String?
   addresses Json?
 
+  // Login por e-mail/senha desta loja (opcional — Google continua funcionando sem isto).
+  passwordHash String?
+
   cart   Cart?
   orders Order[]
 
-  @@unique([storeId, email]) // mesmo e-mail pode existir em lojas diferentes
-  @@index([storeId])
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([storeId, email]) // mesmo e-mail pode existir em lojas diferentes
+  @@index([storeId])
 }
 
 // ─── Carrinho ────────────────────────────────────────────────────────────────
@@ -135,7 +151,7 @@ model Cart {
   storeId    String
   store      Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
   token      String    @unique @default(cuid()) // cookie cart_token (convidado)
-  customerId String?   @unique                  // null = convidado
+  customerId String?   @unique // null = convidado
   customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
   items CartItem[]
@@ -197,9 +213,9 @@ model Order {
   paymentStatus     PaymentStatus     @default(pending)
   fulfillmentStatus FulfillmentStatus @default(awaiting_payment)
 
-  shippingAddress    Json
-  trackingCode       String?
-  melhorEnvioOrderId String?
+  shippingAddress         Json
+  trackingCode            String?
+  shippingProviderOrderId String?
 
   items    OrderItem[]
   payments Payment[]

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { getActiveStoreId } from "@/lib/tenant";
+import { getActiveStoreId, PasswordChangeRequiredError, StoreNotActiveError } from "@/lib/tenant";
 
 export default async function AdminLayout({
   children,
@@ -15,7 +15,20 @@ export default async function AdminLayout({
 
   try {
     await getActiveStoreId(); // lança se o usuário não é operador de loja alguma
-  } catch {
+  } catch (e) {
+    if (e instanceof PasswordChangeRequiredError) redirect("/mudar-senha");
+    if (e instanceof StoreNotActiveError) {
+      return (
+        <main className="mx-auto max-w-sm px-6 py-16 text-center">
+          <h1 className="text-xl font-medium">Sua loja está em análise</h1>
+          <p className="mt-3 text-sm text-neutral-600">
+            {e.status === "pending"
+              ? "Recebemos seu cadastro e vamos avisar por e-mail assim que a loja for aprovada."
+              : "O acesso a esta loja está suspenso no momento."}
+          </p>
+        </main>
+      );
+    }
     redirect("/"); // logado mas sem vínculo: fora do admin
   }
 
@@ -26,6 +39,9 @@ export default async function AdminLayout({
           <span className="text-sm font-medium">Painel da loja</span>
           <nav className="flex gap-5 text-sm text-neutral-600">
             <Link href="/admin/produtos" className="hover:underline">Produtos</Link>
+            <Link href="/admin/configuracoes/loja" className="hover:underline">Loja</Link>
+            <Link href="/admin/configuracoes/pagamentos" className="hover:underline">Pagamentos</Link>
+            <Link href="/admin/configuracoes/frete" className="hover:underline">Frete</Link>
           </nav>
         </div>
       </header>
