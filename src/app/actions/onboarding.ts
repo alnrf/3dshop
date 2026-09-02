@@ -10,6 +10,8 @@ import { slugify } from "@/lib/format";
 const OnboardingSchema = z.object({
   ownerName: z.string().min(1, "Informe seu nome"),
   email: z.string().email("E-mail inválido"),
+  phone: z.string().min(1, "Informe seu telefone"),
+  cnpj: z.string().min(1, "Informe o CNPJ"),
   storeName: z.string().min(1, "Informe o nome da loja"),
   contractAccepted: z.boolean().refine((v) => v === true, "É preciso aceitar o contrato de serviço"),
 });
@@ -22,7 +24,7 @@ export async function submitOnboardingAction(input: OnboardingInput): Promise<On
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos" };
   }
-  const { ownerName, storeName } = parsed.data;
+  const { ownerName, storeName, phone, cnpj } = parsed.data;
   const email = parsed.data.email.toLowerCase();
   const slug = slugify(storeName);
   if (!slug) return { ok: false, error: "Nome de loja inválido" };
@@ -38,7 +40,7 @@ export async function submitOnboardingAction(input: OnboardingInput): Promise<On
       const store = await tx.store.create({
         data: { slug, name: storeName, status: "pending", contractAcceptedAt: new Date() },
       });
-      const user = await tx.user.create({ data: { email, name: ownerName } });
+      const user = await tx.user.create({ data: { email, name: ownerName, phone, cnpj } });
       await tx.membership.create({
         data: { userId: user.id, storeId: store.id, role: MemberRole.owner },
       });

@@ -2,7 +2,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { submitOnboardingAction, type OnboardingInput } from "@/app/actions/onboarding";
+import { maskPhone, maskCnpj } from "@/lib/format";
 
 const input =
   "mt-1 h-10 w-full rounded-lg border border-neutral-300 px-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2";
@@ -29,6 +31,8 @@ export function OnboardingForm() {
   const [form, setForm] = useState({
     ownerName: "",
     email: "",
+    phone: "",
+    cnpj: "",
     storeName: "",
     contractAccepted: false,
   });
@@ -55,13 +59,23 @@ export function OnboardingForm() {
           Vamos analisar seu cadastro. Assim que sua loja for aprovada, você recebe
           um e-mail com as credenciais de acesso ao painel.
         </p>
+        <Link
+          href="/"
+          className="mt-6 inline-block h-10 rounded-lg border border-neutral-300 px-4 text-sm font-medium leading-10 text-neutral-700 hover:bg-neutral-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        >
+          Voltar para Home
+        </Link>
       </main>
     );
   }
 
   return (
     <main className="mx-auto max-w-md px-6 py-12">
-      <h1 className="text-2xl font-medium">Cadastre sua loja</h1>
+      <Link href="/" className="text-sm text-neutral-500 hover:underline">
+        ← Voltar para Home
+      </Link>
+
+      <h1 className="mt-3 text-2xl font-medium">Cadastre sua loja</h1>
       <p className="mt-1 text-sm text-neutral-500">
         Preencha seus dados para começar a vender.
       </p>
@@ -83,6 +97,29 @@ export function OnboardingForm() {
             className={input}
             value={form.email}
             onChange={(e) => set("email", e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className={label}>Telefone</label>
+          <input
+            type="tel"
+            className={input}
+            value={form.phone}
+            onChange={(e) => set("phone", maskPhone(e.target.value))}
+            placeholder="(11) 91234-5678"
+            maxLength={15}
+          />
+        </div>
+
+        <div>
+          <label className={label}>CNPJ</label>
+          <input
+            className={input}
+            value={form.cnpj}
+            onChange={(e) => set("cnpj", maskCnpj(e.target.value))}
+            placeholder="00.000.000/0000-00"
+            maxLength={18}
           />
         </div>
 

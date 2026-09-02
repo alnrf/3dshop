@@ -1,5 +1,8 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { ApproveButton } from "./approve-button";
+import { RejectButton } from "./reject-button";
+import { DetailsLink } from "./details-link";
 
 export default async function PlataformaLojasPage() {
   const stores = await prisma.store.findMany({
@@ -29,7 +32,9 @@ export default async function PlataformaLojasPage() {
               return (
                 <tr key={store.id} className="align-top">
                   <td className="border-b border-neutral-100 py-3 pr-3">
-                    <div className="font-medium">{store.name}</div>
+                    <Link href={`/plataforma/lojas/${store.id}`} className="font-medium hover:underline">
+                      {store.name}
+                    </Link>
                     <div className="text-xs text-neutral-500">/{store.slug}</div>
                   </td>
                   <td className="border-b border-neutral-100 px-3 py-3">
@@ -42,14 +47,24 @@ export default async function PlataformaLojasPage() {
                           ? "rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800"
                           : store.status === "pending"
                             ? "rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
-                            : "rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-600"
+                            : store.status === "rejected"
+                              ? "rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700"
+                              : "rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-600"
                       }
                     >
                       {store.status}
                     </span>
                   </td>
                   <td className="border-b border-neutral-100 py-3 pl-3">
-                    {store.status === "pending" ? <ApproveButton storeId={store.id} /> : null}
+                    <div className="flex items-center gap-1">
+                      {store.status === "pending" && (
+                        <>
+                          <ApproveButton storeId={store.id} />
+                          <RejectButton storeId={store.id} />
+                        </>
+                      )}
+                      {store.status === "active" && <DetailsLink storeId={store.id} />}
+                    </div>
                   </td>
                 </tr>
               );

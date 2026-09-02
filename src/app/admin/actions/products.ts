@@ -8,6 +8,7 @@ import { requireStoreAccess, getActiveStoreId } from "@/lib/tenant";
 import { runWithStore } from "@/lib/tenant-context";
 import { createUploadUrl } from "@/lib/r2";
 import { slugify } from "@/lib/format";
+import { productLimitForPlan } from "@/lib/plans";
 
 const ProductSchema = z.object({
   name: z.string().min(1, "Informe o nome"),
@@ -58,7 +59,20 @@ export async function createProductAction(input: ProductInput): Promise<ProductR
   }
   const { imageKeys, ...data } = parsed.data;
 
+  const store = await prisma.store.findUnique({ where: { id: storeId }, select: { plan: true } });
+  const limit = productLimitForPlan(store?.plan ?? "free");
+
   return runWithStore(storeId, async () => {
+    if (limit !== null) {
+      const count = await prisma.product.count();
+      if (count >= limit) {
+        return {
+          ok: false,
+          error: `Limite de ${limit} produtos do plano gratuito atingido. Exclua um produto antigo ou assine o plano Pro para produtos ilimitados.`,
+        };
+      }
+    }
+
     try {
       const product = await prisma.product.create({
         // storeId é injetado pela extensão de tenant

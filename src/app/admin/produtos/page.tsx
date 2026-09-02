@@ -6,6 +6,7 @@ import { getActiveStoreId } from "@/lib/tenant";
 import { runWithStore } from "@/lib/tenant-context";
 import { r2Url } from "@/lib/r2";
 import { formatBRL } from "@/lib/format";
+import { productLimitForPlan } from "@/lib/plans";
 import {
   toggleActiveFormAction,
   deleteProductFormAction,
@@ -13,6 +14,7 @@ import {
 
 export default async function ProdutosAdminPage() {
   const storeId = await getActiveStoreId(); // acesso já barrado no layout
+  const store = await prisma.store.findUnique({ where: { id: storeId }, select: { plan: true } });
   const products = await runWithStore(storeId, async () =>
     prisma.product.findMany({
       orderBy: { createdAt: "desc" }, // extensão injeta o storeId
@@ -20,10 +22,21 @@ export default async function ProdutosAdminPage() {
     }),
   );
 
+  const limit = productLimitForPlan(store?.plan ?? "free");
+  const atLimit = limit !== null && products.length >= limit;
+
   return (
     <main className="mx-auto max-w-6xl px-6 py-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-medium">Produtos</h1>
+        <div>
+          <h1 className="text-2xl font-medium">Produtos</h1>
+          {limit !== null && (
+            <p className={`mt-1 text-sm ${atLimit ? "text-amber-700" : "text-neutral-500"}`}>
+              {products.length} / {limit} produtos do plano gratuito
+              {atLimit && " — exclua um produto antigo ou assine o plano Pro para cadastrar mais"}
+            </p>
+          )}
+        </div>
         <Link
           href="/admin/produtos/novo"
           className="inline-flex h-10 items-center rounded-lg bg-neutral-900 px-4 text-sm font-medium text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"

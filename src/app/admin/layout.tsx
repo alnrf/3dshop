@@ -42,6 +42,8 @@ export default async function AdminLayout({
             <Link href="/admin/configuracoes/loja" className="hover:underline">Loja</Link>
             <Link href="/admin/configuracoes/pagamentos" className="hover:underline">Pagamentos</Link>
             <Link href="/admin/configuracoes/frete" className="hover:underline">Frete</Link>
+            <Link href="/admin/plano" className="hover:underline">Plano</Link>
+            <Link href="/admin/perfil" className="hover:underline">Perfil</Link>
           </nav>
         </div>
       </header>

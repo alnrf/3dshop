@@ -34,6 +34,15 @@ model Store {
   // Logotipo exibido no navbar do storefront (R2, mesmo padrão do ProductImage.r2Key).
   logoKey String?
 
+  // Assinatura do plano Pro (plataforma cobrando o lojista — Stripe Billing).
+  // Distinto de paymentConfig acima, que é o gateway da própria loja para
+  // cobrar o cliente final. Fonte de verdade do plano em si continua sendo
+  // `plan`; estes campos só rastreiam a assinatura no Stripe que o mantém
+  // sincronizado via webhook (ver app/api/webhooks/stripe).
+  stripeCustomerId     String? @unique
+  stripeSubscriptionId String? @unique
+  subscriptionStatus   String? // espelha Stripe: active | past_due | canceled | ...
+
   memberships Membership[]
   products    Product[]
   customers   Customer[]
@@ -50,6 +59,11 @@ model User {
   email        String  @unique
   name         String?
   platformRole String? // null = comum; "admin" = dono da plataforma (você)
+
+  // Dados de contato/documento coletados no onboarding self-service. Opcionais
+  // porque usuários criados antes desta coluna (seed, Google direto) não têm.
+  phone String?
+  cnpj  String?
 
   // Login por credencial (onboarding self-service). Google não usa nenhum dos dois.
   passwordHash       String?
