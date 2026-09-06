@@ -12,18 +12,30 @@ import {
   deleteProductFormAction,
 } from "@/app/admin/actions/products";
 
-export default async function ProdutosAdminPage() {
+export default async function ProdutosAdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
   const storeId = await getActiveStoreId(); // acesso já barrado no layout
+  const { q } = await searchParams;
+  const query = q?.trim() ?? "";
+
   const store = await prisma.store.findUnique({ where: { id: storeId }, select: { plan: true } });
-  const products = await runWithStore(storeId, async () =>
-    prisma.product.findMany({
-      orderBy: { createdAt: "desc" }, // extensão injeta o storeId
+  const [products, totalCount] = await runWithStore(storeId, async () => [
+    await prisma.product.findMany({
+      // extensão injeta o storeId
+      where: query
+        ? { OR: [{ name: { contains: query, mode: "insensitive" } }, { tags: { has: query.toLowerCase() } }] }
+        : undefined,
+      orderBy: { createdAt: "desc" },
       include: { images: { orderBy: { position: "asc" }, take: 1 } },
     }),
-  );
+    await prisma.product.count(),
+  ]);
 
   const limit = productLimitForPlan(store?.plan ?? "free");
-  const atLimit = limit !== null && products.length >= limit;
+  const atLimit = limit !== null && totalCount >= limit;
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-8">
@@ -32,7 +44,7 @@ export default async function ProdutosAdminPage() {
           <h1 className="text-2xl font-medium">Produtos</h1>
           {limit !== null && (
             <p className={`mt-1 text-sm ${atLimit ? "text-amber-700" : "text-neutral-500"}`}>
-              {products.length} / {limit} produtos do plano gratuito
+              {totalCount} / {limit} produtos do plano gratuito
               {atLimit && " — exclua um produto antigo ou assine o plano Pro para cadastrar mais"}
             </p>
           )}
@@ -45,9 +57,33 @@ export default async function ProdutosAdminPage() {
         </Link>
       </div>
 
+      <form className="mt-4 flex gap-2" action="/admin/produtos">
+        <input
+          type="text"
+          name="q"
+          defaultValue={query}
+          placeholder="Buscar por nome ou tag…"
+          className="h-10 w-full max-w-sm rounded-lg border border-neutral-300 px-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        />
+        <button
+          type="submit"
+          className="h-10 rounded-lg border border-neutral-300 px-4 text-sm font-medium hover:bg-neutral-50"
+        >
+          Buscar
+        </button>
+        {query && (
+          <Link
+            href="/admin/produtos"
+            className="flex h-10 items-center text-sm text-neutral-500 underline-offset-2 hover:underline"
+          >
+            Limpar
+          </Link>
+        )}
+      </form>
+
       {products.length === 0 ? (
         <p className="mt-12 text-center text-sm text-neutral-500">
-          Nenhum produto ainda. Cadastre o primeiro para abrir a loja.
+          {query ? `Nenhum produto encontrado para "${query}".` : "Nenhum produto ainda. Cadastre o primeiro para abrir a loja."}
         </p>
       ) : (
         <table className="mt-6 w-full border-separate border-spacing-0 text-sm">

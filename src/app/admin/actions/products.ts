@@ -2,27 +2,34 @@
 "use server";
 
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireStoreAccess, getActiveStoreId } from "@/lib/tenant";
 import { runWithStore } from "@/lib/tenant-context";
 import { createUploadUrl } from "@/lib/r2";
-import { slugify } from "@/lib/format";
+import { slugify, normalizeTags } from "@/lib/format";
 import { productLimitForPlan } from "@/lib/plans";
 
+// invalid_type_error cobre o caso de o número nem chegar a ser um número (ex.:
+// campo deixado com texto inválido no form vira NaN no client, que o Next
+// serializa como "$NaN" — sem isso, quem aparece pro lojista é a mensagem
+// crua do Zod, "Expected number, received nan").
 const ProductSchema = z.object({
   name: z.string().min(1, "Informe o nome"),
   slug: z.string().min(1),
   description: z.string().optional(),
   material: z.string().optional(),
   printTime: z.string().optional(),
-  priceCents: z.number().int().positive("Preço inválido"),
-  stock: z.number().int().min(0, "Estoque inválido"),
-  weightGrams: z.number().int().positive("Peso é necessário para o frete"),
-  widthCm: z.number().int().positive("Largura é necessária para o frete"),
-  heightCm: z.number().int().positive("Altura é necessária para o frete"),
-  lengthCm: z.number().int().positive("Comprimento é necessário para o frete"),
+  priceCents: z.number({ invalid_type_error: "Preço inválido" }).int().positive("Preço inválido"),
+  stock: z.number({ invalid_type_error: "Estoque inválido" }).int().min(0, "Estoque inválido"),
+  // Sem .int(): peso e medidas de impressão 3D são fracionados (12.5g, 8.3cm).
+  weightGrams: z.number({ invalid_type_error: "Peso inválido" }).positive("Peso é necessário para o frete"),
+  widthCm: z.number({ invalid_type_error: "Largura inválida" }).positive("Largura é necessária para o frete"),
+  heightCm: z.number({ invalid_type_error: "Altura inválida" }).positive("Altura é necessária para o frete"),
+  lengthCm: z.number({ invalid_type_error: "Comprimento inválido" }).positive("Comprimento é necessário para o frete"),
   active: z.boolean(),
+  tags: z.array(z.string()).default([]),
   imageKeys: z.array(z.string()).default([]),
 });
 
@@ -32,6 +39,25 @@ export type ProductResult = { ok: true; id: string } | { ok: false; error: strin
 function revalidateProducts() {
   revalidatePath("/admin/produtos");
   revalidatePath("/loja", "layout"); // vitrine do tenant
+}
+
+/**
+ * Sempre loga o erro real no console do servidor — antes ele era engolido e
+ * qualquer falha (não só colisão de slug) virava a mesma mensagem genérica,
+ * o que mascarava o problema de verdade e confundia quem via a mensagem.
+ * Só quando é de fato uma violação da constraint única (storeId, slug) que a
+ * mensagem específica de slug faz sentido.
+ */
+function describeSaveError(err: unknown): string {
+  console.error("Falha ao salvar produto:", err);
+  if (
+    err instanceof Prisma.PrismaClientKnownRequestError &&
+    err.code === "P2002" &&
+    (err.meta?.target as string[] | undefined)?.includes("slug")
+  ) {
+    return "Não foi possível salvar — o slug já existe nesta loja?";
+  }
+  return "Não foi possível salvar. Tente novamente.";
 }
 
 /** Exige que o usuário seja operador de alguma loja antes de assinar o upload. */
@@ -58,6 +84,7 @@ export async function createProductAction(input: ProductInput): Promise<ProductR
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos" };
   }
   const { imageKeys, ...data } = parsed.data;
+  data.tags = normalizeTags(data.tags);
 
   const store = await prisma.store.findUnique({ where: { id: storeId }, select: { plan: true } });
   const limit = productLimitForPlan(store?.plan ?? "free");
@@ -83,8 +110,8 @@ export async function createProductAction(input: ProductInput): Promise<ProductR
       });
       revalidateProducts();
       return { ok: true, id: product.id };
-    } catch {
-      return { ok: false, error: "Não foi possível salvar — o slug já existe nesta loja?" };
+    } catch (err) {
+      return { ok: false, error: describeSaveError(err) };
     }
   });
 }
@@ -104,6 +131,7 @@ export async function updateProductAction(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos" };
   }
   const { imageKeys, ...data } = parsed.data;
+  data.tags = normalizeTags(data.tags);
 
   return runWithStore(storeId, async () => {
     // findUnique é validado pela extensão: retorna null se for de outra loja
@@ -123,8 +151,8 @@ export async function updateProductAction(
       });
       revalidateProducts();
       return { ok: true, id };
-    } catch {
-      return { ok: false, error: "Não foi possível salvar — o slug já existe nesta loja?" };
+    } catch (err) {
+      return { ok: false, error: describeSaveError(err) };
     }
   });
 }

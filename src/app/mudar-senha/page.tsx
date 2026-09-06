@@ -4,6 +4,6 @@ import { ChangePasswordForm } from "./change-password-form";
 
 export default async function MudarSenhaPage() {
   const session = await auth();
-  if (!session?.user) redirect("/api/auth/signin?callbackUrl=/mudar-senha");
+  if (!session?.user) redirect("/entrar?callbackUrl=/mudar-senha");
   return <ChangePasswordForm />;
 }

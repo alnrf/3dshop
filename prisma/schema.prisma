@@ -107,11 +107,16 @@ model Product {
   stock       Int     @default(0)
   active      Boolean @default(true)
 
-  // Necessários para cotar frete
-  weightGrams Int
-  widthCm     Int
-  heightCm    Int
-  lengthCm    Int
+  // Livres, normalizadas em minúsculo no save (lib/format.ts normalizeTags)
+  // pra busca por nome/tag funcionar sem se importar com caixa.
+  tags String[] @default([])
+
+  // Necessários para cotar frete. Float em tudo — impressão 3D tem peso e
+  // medidas pequenos/fracionados (ex.: 12.5g, 8.3cm) e casa decimal importa.
+  weightGrams Float
+  widthCm     Float
+  heightCm    Float
+  lengthCm    Float
 
   images     ProductImage[]
   cartItems  CartItem[]

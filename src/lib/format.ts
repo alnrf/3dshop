@@ -39,3 +39,31 @@ export function maskCnpj(value: string): string {
     .replace(/\.(\d{3})(\d)/, ".$1/$2")
     .replace(/(\d{4})(\d)/, "$1-$2");
 }
+
+/**
+ * Normaliza tags de produto: aparadas, minúsculas, sem vazias/duplicadas.
+ * Minúsculo de propósito — é o que permite buscar por tag sem se importar
+ * com caixa (ex.: "Office" e "office" viram a mesma tag).
+ */
+export function normalizeTags(tags: string[]): string[] {
+  const seen = new Set<string>();
+  for (const raw of tags) {
+    const tag = raw.trim().toLowerCase();
+    if (tag) seen.add(tag);
+  }
+  return [...seen];
+}
+
+/**
+ * Restringe "tempo de impressão" ao formato H:MM enquanto o usuário digita —
+ * até 3 dígitos de hora (impressões longas passam de 99h, ex.: "124:30") e 2
+ * de minuto. Não insere ":" sozinho (ambíguo com hora de 2 ou 3 dígitos): só
+ * filtra o que não for dígito ou os ":" excedentes.
+ */
+export function sanitizePrintTime(value: string): string {
+  const [hRaw, mRaw] = value.split(":");
+  const hours = hRaw.replace(/\D/g, "").slice(0, 3);
+  if (mRaw === undefined) return hours;
+  const minutes = mRaw.replace(/\D/g, "").slice(0, 2);
+  return `${hours}:${minutes}`;
+}

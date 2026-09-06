@@ -33,6 +33,7 @@ export default async function ProdutoPage({
       stock={product.stock}
       material={product.material}
       printTime={product.printTime}
+      tags={product.tags}
       images={product.images.map((i) => r2Url(i.r2Key))}
     />
   );

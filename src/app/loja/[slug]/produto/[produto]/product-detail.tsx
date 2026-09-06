@@ -14,6 +14,7 @@ export function ProductDetail({
   stock,
   material,
   printTime,
+  tags,
   images,
 }: {
   id: string;
@@ -23,6 +24,7 @@ export function ProductDetail({
   stock: number;
   material: string | null;
   printTime: string | null;
+  tags: string[];
   images: string[];
 }) {
   const [active, setActive] = useState(0);
@@ -107,6 +109,19 @@ export function ProductDetail({
           <p className="mt-4 whitespace-pre-line text-sm leading-relaxed text-neutral-700">
             {description}
           </p>
+        )}
+
+        {tags.length > 0 && (
+          <div className="mt-4">
+            <h2 className="text-sm font-medium text-stone-500">Tags</h2>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {tags.map((tag) => (
+                <span key={tag} className="rounded-md bg-stone-100 px-2.5 py-1 text-sm text-stone-700">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
         )}
 
         <p className="mt-4 text-sm text-neutral-500">

@@ -11,7 +11,7 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }) {
   const session = await auth();
-  if (!session?.user) redirect("/api/auth/signin?callbackUrl=/admin/produtos");
+  if (!session?.user) redirect("/entrar?callbackUrl=/admin/produtos");
 
   try {
     await getActiveStoreId(); // lança se o usuário não é operador de loja alguma
