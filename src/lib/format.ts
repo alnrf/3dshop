@@ -67,3 +67,28 @@ export function sanitizePrintTime(value: string): string {
   const minutes = mRaw.replace(/\D/g, "").slice(0, 2);
   return `${hours}:${minutes}`;
 }
+
+/**
+ * Exibe "tempo de impressão" (H:MM) por extenso pro comprador — ex.:
+ * "28:12" (28h12min) -> "1 dia, 4 horas e 12 minutos". Produtos cadastrados
+ * antes desse formato existir têm texto livre (ex.: "cerca de 4 horas"): se
+ * não bater com H:MM, devolve como está em vez de quebrar.
+ */
+export function formatPrintTime(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const match = /^(\d{1,3}):(\d{2})$/.exec(raw.trim());
+  if (!match) return raw;
+
+  const totalHours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days} dia${days > 1 ? "s" : ""}`);
+  if (hours > 0) parts.push(`${hours} hora${hours > 1 ? "s" : ""}`);
+  if (minutes > 0) parts.push(`${minutes} minuto${minutes > 1 ? "s" : ""}`);
+  if (parts.length === 0) return "menos de 1 minuto";
+  if (parts.length === 1) return parts[0];
+  return `${parts.slice(0, -1).join(", ")} e ${parts[parts.length - 1]}`;
+}

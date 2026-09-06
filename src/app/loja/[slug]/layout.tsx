@@ -60,6 +60,14 @@ export default async function LojaLayout({
     <div className="min-h-dvh bg-stone-50 text-stone-900">
       <header className="sticky top-0 z-10 border-b border-stone-200 bg-stone-50/90 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
+          <Link href={base} className="font-medium tracking-tight">
+            {logoUrl ? (
+              <Image src={logoUrl} alt={store.name} width={120} height={32} className="h-8 w-auto object-contain" />
+            ) : (
+              store.name
+            )}
+          </Link>
+
           <nav className="flex items-center gap-5 text-sm text-stone-600">
             {customer ? (
               <Link href={`${base}/perfil`} aria-label="Meu perfil">
@@ -94,14 +102,6 @@ export default async function LojaLayout({
               )}
             </Link>
           </nav>
-
-          <Link href={base} className="font-medium tracking-tight">
-            {logoUrl ? (
-              <Image src={logoUrl} alt={store.name} width={120} height={32} className="h-8 w-auto object-contain" />
-            ) : (
-              store.name
-            )}
-          </Link>
         </div>
       </header>
       {children}

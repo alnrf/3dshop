@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 import { getActiveStoreId, PasswordChangeRequiredError, StoreNotActiveError } from "@/lib/tenant";
 
 export default async function AdminLayout({
@@ -13,8 +14,10 @@ export default async function AdminLayout({
   const session = await auth();
   if (!session?.user) redirect("/entrar?callbackUrl=/admin/produtos");
 
+  let storeSlug: string | undefined;
   try {
-    await getActiveStoreId(); // lança se o usuário não é operador de loja alguma
+    const storeId = await getActiveStoreId(); // lança se o usuário não é operador de loja alguma
+    storeSlug = (await prisma.store.findUnique({ where: { id: storeId }, select: { slug: true } }))?.slug;
   } catch (e) {
     if (e instanceof PasswordChangeRequiredError) redirect("/mudar-senha");
     if (e instanceof StoreNotActiveError) {
@@ -44,6 +47,16 @@ export default async function AdminLayout({
             <Link href="/admin/configuracoes/frete" className="hover:underline">Frete</Link>
             <Link href="/admin/plano" className="hover:underline">Plano</Link>
             <Link href="/admin/perfil" className="hover:underline">Perfil</Link>
+            {storeSlug && (
+              <Link
+                href={`/loja/${storeSlug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:underline"
+              >
+                Ir à Loja ↗
+              </Link>
+            )}
           </nav>
         </div>
       </header>

@@ -1,7 +1,10 @@
 // app/loja/[slug]/page.tsx
 import { notFound } from "next/navigation";
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { withStore } from "@/lib/tenant";
+import { currentStore, withStore } from "@/lib/tenant";
+import { currentCustomer } from "@/lib/customer";
+import { getCartWithItems } from "@/lib/cart";
 import { r2Url } from "@/lib/r2";
 import { ProductCard } from "./product-card";
 
@@ -12,21 +15,34 @@ export default async function VitrinePage({
 }) {
   const { q } = await searchParams;
   const query = q?.trim() ?? "";
+  const session = await auth();
+
+  const store = await currentStore();
+  if (!store) notFound();
+  const base = `/loja/${store.slug}`;
 
   // withStore resolve o tenant e roda a query no contexto (extensão aplica storeId).
-  const products = await withStore(async () =>
-    prisma.product.findMany({
-      where: {
-        active: true,
-        ...(query
-          ? { OR: [{ name: { contains: query, mode: "insensitive" } }, { tags: { has: query.toLowerCase() } }] }
-          : {}),
-      },
-      orderBy: { createdAt: "desc" },
-      include: { images: { orderBy: { position: "asc" }, take: 1 } },
-    }),
-  );
-  if (!products) notFound();
+  // Cart junto na mesma passada: dá pra saber a quantidade já no carrinho e
+  // trocar "Adicionar" por "Remover" no card.
+  const result = await withStore(async () => {
+    const [products, customer] = await Promise.all([
+      prisma.product.findMany({
+        where: {
+          active: true,
+          ...(query
+            ? { OR: [{ name: { contains: query, mode: "insensitive" } }, { tags: { has: query.toLowerCase() } }] }
+            : {}),
+        },
+        orderBy: { createdAt: "desc" },
+        include: { images: { orderBy: { position: "asc" }, take: 1 } },
+      }),
+      currentCustomer(session?.user?.email),
+    ]);
+    const cart = await getCartWithItems(customer?.id ?? null);
+    return { products, cartQtyById: new Map(cart.items.map((i) => [i.productId, i.qty])) };
+  });
+  if (!result) notFound();
+  const { products, cartQtyById } = result;
 
   const items = products.map((p) => ({
     id: p.id,
@@ -35,6 +51,7 @@ export default async function VitrinePage({
     priceCents: p.priceCents,
     stock: p.stock,
     imageUrl: r2Url(p.images[0]?.r2Key),
+    cartQty: cartQtyById.get(p.id) ?? 0,
   }));
 
   return (
@@ -62,7 +79,7 @@ export default async function VitrinePage({
       ) : (
         <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {items.map((p) => (
-            <ProductCard key={p.id} {...p} />
+            <ProductCard key={p.id} {...p} base={base} />
           ))}
         </div>
       )}

@@ -2,11 +2,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import Image from "next/image";
 import { addToCartAction } from "@/app/actions/cart";
-import { formatBRL } from "@/lib/format";
+import { formatBRL, formatPrintTime } from "@/lib/format";
+import { CartQuantityControl } from "@/components/cart-quantity-control";
 
 export function ProductDetail({
+  base,
   id,
   name,
   description,
@@ -14,9 +17,15 @@ export function ProductDetail({
   stock,
   material,
   printTime,
+  weightGrams,
+  widthCm,
+  heightCm,
+  lengthCm,
   tags,
   images,
+  cartQty,
 }: {
+  base: string;
   id: string;
   name: string;
   description: string | null;
@@ -24,31 +33,45 @@ export function ProductDetail({
   stock: number;
   material: string | null;
   printTime: string | null;
+  weightGrams: number;
+  widthCm: number;
+  heightCm: number;
+  lengthCm: number;
   tags: string[];
   images: string[];
+  cartQty: number;
 }) {
   const [active, setActive] = useState(0);
-  const [qty, setQty] = useState(1);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [added, setAdded] = useState(false);
+  const [cartQtyState, setCartQtyState] = useState(cartQty);
   const soldOut = stock <= 0;
+
+  function prevImage() {
+    setActive((a) => (a - 1 + images.length) % images.length);
+  }
+  function nextImage() {
+    setActive((a) => (a + 1) % images.length);
+  }
 
   function add() {
     setError(null);
     startTransition(async () => {
-      const res = await addToCartAction(id, qty);
-      if (res.ok) {
-        setAdded(true);
-        setTimeout(() => setAdded(false), 1500);
-      } else {
-        setError(res.error);
-      }
+      const res = await addToCartAction(id, 1);
+      if (res.ok) setCartQtyState(1);
+      else setError(res.error);
     });
   }
 
+  const formattedPrintTime = formatPrintTime(printTime);
+
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 md:grid md:grid-cols-2 md:gap-10">
+    <main className="mx-auto max-w-5xl px-4 py-6">
+      <Link href={base} className="text-sm text-neutral-500 hover:underline">
+        ← Voltar aos produtos
+      </Link>
+
+      <div className="mt-4 md:grid md:grid-cols-2 md:gap-10">
       {/* Carrossel */}
       <div>
         <div className="relative aspect-square overflow-hidden rounded-2xl bg-neutral-100">
@@ -61,6 +84,26 @@ export function ProductDetail({
               className="object-cover"
               priority
             />
+          )}
+          {images.length > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={prevImage}
+                aria-label="Imagem anterior"
+                className="absolute left-2 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-lg text-neutral-700 shadow hover:bg-white"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                onClick={nextImage}
+                aria-label="Próxima imagem"
+                className="absolute right-2 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-lg text-neutral-700 shadow hover:bg-white"
+              >
+                ›
+              </button>
+            </>
           )}
         </div>
         {images.length > 1 && (
@@ -88,7 +131,7 @@ export function ProductDetail({
         <h1 className="text-xl font-medium md:text-2xl">{name}</h1>
         <p className="mt-2 text-lg font-medium tabular-nums">{formatBRL(priceCents)}</p>
 
-        {(material || printTime) && (
+        {(material || formattedPrintTime) && (
           <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
             {material && (
               <div>
@@ -96,14 +139,27 @@ export function ProductDetail({
                 <dd className="font-medium">{material}</dd>
               </div>
             )}
-            {printTime && (
+            {formattedPrintTime && (
               <div>
                 <dt className="text-neutral-500">Tempo de impressão</dt>
-                <dd className="font-medium">{printTime}</dd>
+                <dd className="font-medium">{formattedPrintTime}</dd>
               </div>
             )}
           </dl>
         )}
+
+        <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <dt className="text-neutral-500">Peso</dt>
+            <dd className="font-medium">{weightGrams} g</dd>
+          </div>
+          <div>
+            <dt className="text-neutral-500">Dimensões</dt>
+            <dd className="font-medium">
+              {widthCm} × {heightCm} × {lengthCm} cm
+            </dd>
+          </div>
+        </dl>
 
         {description && (
           <p className="mt-4 whitespace-pre-line text-sm leading-relaxed text-neutral-700">
@@ -133,45 +189,27 @@ export function ProductDetail({
         </p>
 
         {!soldOut && (
-          <div className="mt-4 inline-flex items-center rounded-lg border border-neutral-300">
-            <button
-              type="button"
-              onClick={() => setQty((q) => Math.max(1, q - 1))}
-              disabled={qty <= 1}
-              aria-label="Diminuir quantidade"
-              className="flex h-11 w-11 items-center justify-center text-lg disabled:opacity-40"
-            >
-              −
-            </button>
-            <span aria-live="polite" className="w-8 text-center text-sm tabular-nums">
-              {qty}
-            </span>
-            <button
-              type="button"
-              onClick={() => setQty((q) => Math.min(stock, q + 1))}
-              disabled={qty >= stock}
-              aria-label="Aumentar quantidade"
-              className="flex h-11 w-11 items-center justify-center text-lg disabled:opacity-40"
-            >
-              +
-            </button>
+          <div className="mt-4">
+            {cartQtyState > 0 ? (
+              <CartQuantityControl
+                productId={id}
+                stock={stock}
+                qty={cartQtyState}
+                onQtyChange={setCartQtyState}
+                onRemoved={() => setCartQtyState(0)}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={add}
+                disabled={pending}
+                className="h-12 w-full rounded-lg bg-neutral-900 text-sm font-medium text-white disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 md:w-auto md:px-8"
+              >
+                {pending ? "Adicionando…" : "Adicionar ao carrinho"}
+              </button>
+            )}
           </div>
         )}
-
-        <button
-          type="button"
-          onClick={add}
-          disabled={pending || soldOut}
-          className="mt-4 h-12 w-full rounded-lg bg-neutral-900 text-sm font-medium text-white disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 md:w-auto md:px-8"
-        >
-          {soldOut
-            ? "Indisponível"
-            : added
-              ? "Adicionado ✓"
-              : pending
-                ? "Adicionando…"
-                : "Adicionar ao carrinho"}
-        </button>
 
         {soldOut && (
           <p className="mt-3 text-sm text-neutral-500">
@@ -186,6 +224,7 @@ export function ProductDetail({
             {error}
           </p>
         )}
+      </div>
       </div>
     </main>
   );

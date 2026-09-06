@@ -42,7 +42,12 @@ export default async function CarrinhoPage() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 md:py-10">
-      <h1 className="text-xl font-medium md:text-2xl">Carrinho</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-medium md:text-2xl">Carrinho</h1>
+        <Link href={base} className="text-sm text-neutral-500 hover:underline">
+          ← Voltar
+        </Link>
+      </div>
 
       <div className="mt-6 md:grid md:grid-cols-[1fr_320px] md:gap-8">
         <ul className="divide-y divide-neutral-200">
