@@ -2,14 +2,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { registerCustomerAction } from "@/app/actions/customer-auth";
 
 const input =
   "h-11 w-full rounded-lg border border-stone-300 px-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2";
 
 export function RegisterForm({ storeSlug, base }: { storeSlug: string; base: string }) {
-  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,9 +23,15 @@ export function RegisterForm({ storeSlug, base }: { storeSlug: string; base: str
     }
     setSaving(true);
     const res = await registerCustomerAction({ storeSlug, name, email, password });
+    if (res.ok) {
+      // Navegação "dura" (não router.push): o header (layout) já pode estar
+      // em cache do lado do cliente com o estado "deslogado" de antes do
+      // cadastro — só um reload completo garante que ele releia a sessão nova.
+      window.location.href = `${base}/pos-login`;
+      return;
+    }
     setSaving(false);
-    if (res.ok) router.push(`${base}/pos-login`);
-    else setError(res.error);
+    setError(res.error);
   }
 
   return (

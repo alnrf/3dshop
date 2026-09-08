@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/auth";
-import { currentStore } from "@/lib/tenant";
+import { currentStore, withStore } from "@/lib/tenant";
+import { currentCustomer } from "@/lib/customer";
 import { RegisterForm } from "./register-form";
 
 export default async function RegistrarPage() {
@@ -11,8 +12,12 @@ export default async function RegistrarPage() {
   if (!store) notFound();
   const base = `/loja/${store.slug}`;
 
+  // Mesma checagem de entrar/page.tsx: só redireciona se já for Customer
+  // DESTA loja, não apenas por ter alguma sessão (operador logado no /admin
+  // com a mesma conta não deve ser barrado de se cadastrar como cliente).
   const session = await auth();
-  if (session?.user) redirect(base);
+  const customer = await withStore(() => currentCustomer(session?.user?.email));
+  if (customer) redirect(base);
 
   return (
     <main className="mx-auto max-w-sm px-4 py-16 text-center">

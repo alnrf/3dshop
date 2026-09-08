@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { auth, signIn } from "@/auth";
-import { currentStore } from "@/lib/tenant";
+import { currentStore, withStore } from "@/lib/tenant";
+import { currentCustomer } from "@/lib/customer";
 import { LoginForm } from "./login-form";
 
 export default async function EntrarPage() {
@@ -11,8 +12,12 @@ export default async function EntrarPage() {
   if (!store) notFound();
   const base = `/loja/${store.slug}`;
 
+  // Checa se já é Customer DESTA loja — não basta ter sessão: um operador
+  // logado no /admin (mesma conta Google) também tem `session.user`, mas não
+  // é cliente da própria loja, e não pode ser barrado daqui.
   const session = await auth();
-  if (session?.user) redirect(base);
+  const customer = await withStore(() => currentCustomer(session?.user?.email));
+  if (customer) redirect(base);
 
   async function loginGoogle() {
     "use server";

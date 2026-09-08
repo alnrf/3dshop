@@ -129,24 +129,88 @@ export default async function ProdutosAdminPage({
                   </span>
                 </td>
                 <td className="border-b border-neutral-100 py-3 pl-3">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1">
                     <Link
                       href={`/admin/produtos/${p.id}`}
-                      className="text-neutral-700 underline-offset-2 hover:underline"
+                      title="Editar"
+                      aria-label="Editar"
+                      className="flex items-center justify-center rounded p-1.5 text-neutral-600 hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2"
                     >
-                      Editar
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="h-5 w-5"
+                      >
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                      </svg>
                     </Link>
                     <form action={toggleActiveFormAction}>
                       <input type="hidden" name="id" value={p.id} />
                       <input type="hidden" name="active" value={String(!p.active)} />
-                      <button className="text-neutral-700 underline-offset-2 hover:underline">
-                        {p.active ? "Desativar" : "Ativar"}
+                      <button
+                        title={p.active ? "Desativar" : "Ativar"}
+                        aria-label={p.active ? "Desativar" : "Ativar"}
+                        className="flex items-center justify-center rounded p-1.5 text-neutral-600 hover:bg-neutral-100 cursor-pointer focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2"
+                      >
+                        {p.active ? (
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="h-5 w-5"
+                          >
+                            <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+                            <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68M6.61 6.61C3.35 8.36 2 12 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+                            <path d="m2 2 20 20" />
+                          </svg>
+                        ) : (
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="h-5 w-5"
+                          >
+                            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                        )}
                       </button>
                     </form>
                     <form action={deleteProductFormAction}>
                       <input type="hidden" name="id" value={p.id} />
-                      <button className="text-red-600 underline-offset-2 hover:underline">
-                        Excluir
+                      <button
+                        title="Excluir"
+                        aria-label="Excluir"
+                        className="flex items-center justify-center rounded p-1.5 text-red-600 hover:bg-red-50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="h-5 w-5"
+                        >
+                          <path d="M3 6h18" />
+                          <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6Z" />
+                          <path d="M10 11v6M14 11v6" />
+                        </svg>
                       </button>
                     </form>
                   </div>

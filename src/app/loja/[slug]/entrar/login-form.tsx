@@ -2,14 +2,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { loginCustomerAction } from "@/app/actions/customer-auth";
 
 const input =
   "h-11 w-full rounded-lg border border-stone-300 px-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2";
 
 export function LoginForm({ storeSlug, base }: { storeSlug: string; base: string }) {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
@@ -19,9 +17,15 @@ export function LoginForm({ storeSlug, base }: { storeSlug: string; base: string
     setError(null);
     setSaving(true);
     const res = await loginCustomerAction({ storeSlug, email, password });
+    if (res.ok) {
+      // Navegação "dura" (não router.push): o header (layout) já pode estar
+      // em cache do lado do cliente com o estado "deslogado" de antes do
+      // login — só um reload completo garante que ele releia a sessão nova.
+      window.location.href = `${base}/pos-login`;
+      return;
+    }
     setSaving(false);
-    if (res.ok) router.push(`${base}/pos-login`);
-    else setError(res.error);
+    setError(res.error);
   }
 
   return (
