@@ -40,6 +40,21 @@ export function maskCnpj(value: string): string {
     .replace(/(\d{4})(\d)/, "$1-$2");
 }
 
+/** Aplica máscara de CPF enquanto o usuário digita. Ex.: "12345678900" -> "123.456.789-00" */
+export function maskCpf(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  return digits
+    .replace(/^(\d{3})(\d)/, "$1.$2")
+    .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1-$2");
+}
+
+/** Aplica máscara de CEP enquanto o usuário digita. Ex.: "01310100" -> "01310-100" */
+export function maskCep(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  return digits.replace(/^(\d{5})(\d)/, "$1-$2");
+}
+
 /**
  * Normaliza tags de produto: aparadas, minúsculas, sem vazias/duplicadas.
  * Minúsculo de propósito — é o que permite buscar por tag sem se importar

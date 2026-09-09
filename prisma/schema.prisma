@@ -148,19 +148,36 @@ model Customer {
   name      String
   email     String
   phone     String?
+  cpf       String? // pro CNPJ/CPF na nota fiscal (emissão ainda não existe — só cadastro)
   addresses Json?
 
   // Login por e-mail/senha desta loja (opcional — Google continua funcionando sem isto).
   passwordHash String?
 
-  cart   Cart?
-  orders Order[]
+  cart                Cart?
+  orders              Order[]
+  passwordResetTokens PasswordResetToken[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([storeId, email]) // mesmo e-mail pode existir em lojas diferentes
   @@index([storeId])
+}
+
+// Recuperação de senha do comprador. `token` guarda o HASH (sha256) do token
+// que vai por e-mail — só o link em si prova posse do e-mail, o banco não
+// guarda nada usável sozinho. Curta validade (1h) e uso único (consomeAt).
+model PasswordResetToken {
+  id         String    @id @default(cuid())
+  customerId String
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([customerId])
 }
 
 // ─── Carrinho ────────────────────────────────────────────────────────────────
@@ -231,6 +248,10 @@ model Order {
 
   paymentStatus     PaymentStatus     @default(pending)
   fulfillmentStatus FulfillmentStatus @default(awaiting_payment)
+  // true = item sem estoque no momento da compra, impresso sob encomenda —
+  // o fluxo de status ganha o passo "printing". false = pronta entrega, pula
+  // direto de "paid" pra "shipped" (o item já existe fisicamente).
+  madeToOrder       Boolean           @default(false)
 
   shippingAddress         Json
   trackingCode            String?

@@ -1,10 +1,17 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { requirePlatformAdmin } from "@/lib/tenant";
 import { ApproveButton } from "./approve-button";
 import { RejectButton } from "./reject-button";
 import { DetailsLink } from "./details-link";
 
 export default async function PlataformaLojasPage() {
+  // Guarda própria, não só a do layout: layout e página renderizam em
+  // paralelo no Next, então o redirect do layout não impede a página de
+  // buscar (e vazar, no RSC payload da resposta) os dados antes de "vencer".
+  // Já vimos isso de verdade: e-mail de dono de loja saindo sem sessão nenhuma.
+  await requirePlatformAdmin();
+
   const stores = await prisma.store.findMany({
     orderBy: { createdAt: "desc" },
     include: { memberships: { where: { role: "owner" }, take: 1, include: { user: true } } },

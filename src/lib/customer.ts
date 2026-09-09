@@ -6,6 +6,18 @@
 import { prisma } from "./prisma";
 import { currentStoreId } from "./tenant-context";
 
+/** Formato guardado em Customer.addresses (Json). Um endereço só por enquanto —
+ *  array de propósito, pra dar pra evoluir pra vários sem nova migration. */
+export type CustomerAddress = {
+  cep: string;
+  street: string;
+  number: string;
+  complement?: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+};
+
 export async function ensureCustomer(email: string, name?: string | null) {
   const storeId = currentStoreId();
   if (!storeId) throw new Error("Fora do contexto de loja");

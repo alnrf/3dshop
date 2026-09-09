@@ -9,6 +9,7 @@
 
 import { cookies } from "next/headers";
 import { prisma } from "./prisma";
+import { currentStoreId } from "./tenant-context";
 
 const CART_COOKIE = "cart_token";
 const COOKIE_OPTS = {
@@ -34,6 +35,19 @@ async function clearCartToken() {
 }
 
 /**
+ * A extensão de tenant (lib/prisma.ts) só injeta storeId em create/createMany
+ * e escopa o `where` de find*Many/count/updateMany/deleteMany — upsert fica
+ * de fora (mesmo motivo do update/delete por id: não dá pra escopar com
+ * segurança de forma genérica). Por isso todo upsert em Cart precisa passar
+ * storeId à mão no `create`, como lib/customer.ts já faz para Customer.
+ */
+function requireStoreId(): string {
+  const storeId = currentStoreId();
+  if (!storeId) throw new Error("Fora do contexto de loja");
+  return storeId;
+}
+
+/**
  * Resolve o carrinho ativo:
  *  - logado  -> 1 cart por customerId (cria se não existir)
  *  - convidado -> cart pelo token do cookie (cria + seta cookie se não existir)
@@ -43,7 +57,7 @@ export async function getOrCreateCart(customerId?: string | null) {
   if (customerId) {
     return prisma.cart.upsert({
       where: { customerId },
-      create: { customerId },
+      create: { customerId, storeId: requireStoreId() },
       update: {},
     });
   }
@@ -155,7 +169,7 @@ export async function mergeGuestCartIntoUser(customerId: string) {
 
   const userCart = await prisma.cart.upsert({
     where: { customerId },
-    create: { customerId },
+    create: { customerId, storeId: requireStoreId() },
     update: {},
   });
 

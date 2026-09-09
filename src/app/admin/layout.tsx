@@ -2,7 +2,7 @@
 // nada do admin renderiza. As actions revalidam de novo (defesa em profundidade).
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { auth, signOut } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getActiveStoreId, PasswordChangeRequiredError, StoreNotActiveError } from "@/lib/tenant";
 
@@ -35,6 +35,11 @@ export default async function AdminLayout({
     redirect("/"); // logado mas sem vínculo: fora do admin
   }
 
+  async function handleSignOut() {
+    "use server";
+    await signOut({ redirectTo: "/" });
+  }
+
   return (
     <div className="min-h-dvh bg-white text-neutral-900">
       <header className="border-b border-neutral-200">
@@ -57,6 +62,11 @@ export default async function AdminLayout({
                 Ir à Loja ↗
               </Link>
             )}
+            <form action={handleSignOut}>
+              <button type="submit" className="cursor-pointer hover:underline">
+                Sair
+              </button>
+            </form>
           </nav>
         </div>
       </header>

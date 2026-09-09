@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { requirePlatformAdmin } from "@/lib/tenant";
 import { productLimitForPlan } from "@/lib/plans";
 import { OwnerDetails } from "./owner-details";
 import { PlanSelector } from "./plan-selector";
@@ -26,6 +27,10 @@ const dt = "text-neutral-500";
 const dd = "font-medium text-neutral-900";
 
 export default async function StoreDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+  // Guarda própria — ver comentário equivalente em ../page.tsx. Aqui o risco é
+  // maior ainda: esta página mostra CNPJ e telefone do dono, não só e-mail.
+  await requirePlatformAdmin();
+
   const { id } = await params;
 
   const store = await prisma.store.findUnique({
