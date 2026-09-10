@@ -1,12 +1,13 @@
 // app/plataforma/lojas/[id]/page.tsx — detalhes de uma loja para o dono da
-// plataforma: dados cadastrais hoje; métricas de produtos/mensalidade depois.
+// plataforma: dados cadastrais, produtos e status real da assinatura (Stripe).
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requirePlatformAdmin } from "@/lib/tenant";
-import { productLimitForPlan } from "@/lib/plans";
+import { productLimitForPlan, ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/plans";
 import { OwnerDetails } from "./owner-details";
 import { PlanSelector } from "./plan-selector";
+import { DangerZone } from "./danger-zone";
 
 const STATUS_LABEL: Record<string, string> = {
   active: "active",
@@ -22,6 +23,17 @@ const STATUS_CLASS: Record<string, string> = {
   suspended: "bg-neutral-100 text-neutral-600",
 };
 
+// Espelha os status de assinatura do Stripe (Store.subscriptionStatus, escrito
+// pelo webhook em app/api/webhooks/stripe/route.ts).
+const SUBSCRIPTION_STATUS_LABEL: Record<string, string> = {
+  active: "Ativa",
+  trialing: "Em teste",
+  past_due: "Pagamento atrasado",
+  unpaid: "Pagamento não realizado",
+  canceled: "Cancelada",
+  incomplete: "Incompleta",
+  incomplete_expired: "Expirada sem confirmação",
+};
 const row = "flex justify-between gap-4 border-b border-neutral-100 py-3 text-sm";
 const dt = "text-neutral-500";
 const dd = "font-medium text-neutral-900";
@@ -45,6 +57,7 @@ export default async function StoreDetailsPage({ params }: { params: Promise<{ i
 
   const productCount = await prisma.product.count({ where: { storeId: store.id } });
   const productLimit = productLimitForPlan(store.plan);
+  const orderCount = await prisma.order.count({ where: { storeId: store.id } });
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-8">
@@ -87,10 +100,30 @@ export default async function StoreDetailsPage({ params }: { params: Promise<{ i
           </div>
           <div className={row}>
             <dt className={dt}>Mensalidade</dt>
-            <dd className="text-neutral-400">Em breve.</dd>
+            <dd className={dd}>
+              {store.plan !== "pro" ? (
+                <span className="text-neutral-400">—</span>
+              ) : store.stripeSubscriptionId ? (
+                <span
+                  className={
+                    ACTIVE_SUBSCRIPTION_STATUSES.has(store.subscriptionStatus ?? "")
+                      ? "text-green-700"
+                      : "text-amber-700"
+                  }
+                >
+                  {SUBSCRIPTION_STATUS_LABEL[store.subscriptionStatus ?? ""] ??
+                    store.subscriptionStatus ??
+                    "Status desconhecido"}
+                </span>
+              ) : (
+                <span className="text-neutral-500">Pro definido manualmente (sem assinatura no Stripe)</span>
+              )}
+            </dd>
           </div>
         </dl>
       </section>
+
+      <DangerZone storeId={store.id} status={store.status} orderCount={orderCount} />
     </main>
   );
 }

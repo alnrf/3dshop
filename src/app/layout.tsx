@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
+import { SAAS_NAME } from "@/lib/config";
 import "./globals.css";
 
+// Título padrão — /loja/[slug], /admin e /plataforma sobrescrevem o deles
+// (nome da loja, "<loja> — Painel Admin", "<SaaS> — Painel Admin").
 export const metadata: Metadata = {
-  title: "Loja 3D",
+  title: SAAS_NAME,
   description: "Impressões 3D sob medida",
 };
 

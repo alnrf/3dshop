@@ -4,7 +4,13 @@
 import { useState } from "react";
 import { startCheckoutAction, manageSubscriptionAction } from "@/app/admin/actions/subscription";
 
-export function PlanActions({ plan, stripeConfigured }: { plan: string; stripeConfigured: boolean }) {
+export function PlanActions({
+  hasActiveSubscription,
+  stripeConfigured,
+}: {
+  hasActiveSubscription: boolean;
+  stripeConfigured: boolean;
+}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,7 +44,7 @@ export function PlanActions({ plan, stripeConfigured }: { plan: string; stripeCo
 
   return (
     <div>
-      {plan === "pro" ? (
+      {hasActiveSubscription ? (
         <button
           type="button"
           onClick={handleManage}

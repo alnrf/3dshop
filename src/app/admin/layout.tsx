@@ -1,10 +1,26 @@
 // app/admin/layout.tsx — barreira do painel: sem sessão OU sem loja vinculada,
 // nada do admin renderiza. As actions revalidam de novo (defesa em profundidade).
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getActiveStoreId, PasswordChangeRequiredError, StoreNotActiveError } from "@/lib/tenant";
+
+// Defensivo de propósito: generateMetadata roda em paralelo ao layout (mesmo
+// motivo dos vários "Não autenticado" inofensivos que já vimos nos logs) —
+// sem sessão/loja válida, cai no título genérico; a página real continua
+// redirecionando pro login normalmente, sem relação com isso.
+export async function generateMetadata(): Promise<Metadata> {
+  try {
+    const storeId = await getActiveStoreId();
+    const store = await prisma.store.findUnique({ where: { id: storeId }, select: { name: true } });
+    if (store) return { title: `${store.name} — Painel Admin` };
+  } catch {
+    // sem sessão/loja ativa — título genérico abaixo
+  }
+  return { title: "Painel Admin" };
+}
 
 export default async function AdminLayout({
   children,

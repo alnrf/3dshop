@@ -4,6 +4,8 @@ import { requirePlatformAdmin } from "@/lib/tenant";
 import { ApproveButton } from "./approve-button";
 import { RejectButton } from "./reject-button";
 import { DetailsLink } from "./details-link";
+import { SuspendButton } from "./suspend-button";
+import { ReactivateButton } from "./reactivate-button";
 
 export default async function PlataformaLojasPage() {
   // Guarda própria, não só a do layout: layout e página renderizam em
@@ -70,7 +72,13 @@ export default async function PlataformaLojasPage() {
                           <RejectButton storeId={store.id} />
                         </>
                       )}
-                      {store.status === "active" && <DetailsLink storeId={store.id} />}
+                      {store.status === "active" && (
+                        <>
+                          <DetailsLink storeId={store.id} />
+                          <SuspendButton storeId={store.id} />
+                        </>
+                      )}
+                      {store.status === "suspended" && <ReactivateButton storeId={store.id} />}
                     </div>
                   </td>
                 </tr>

@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePlatformAdmin } from "@/lib/tenant";
 import { hashPassword, generateProvisionalPassword } from "@/lib/password";
 import { sendMail } from "@/lib/mail";
-import { downgradeStoreToFree } from "@/lib/plans";
+import { downgradeStoreToFree, ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/plans";
 
 export type ApproveStoreResult =
   | { ok: true; email: string; provisionalPassword: string }
@@ -122,9 +122,10 @@ export type UpdateStorePlanInput = z.input<typeof UpdateStorePlanSchema>;
 export type UpdateStorePlanResult = { ok: true } | { ok: false; error: string };
 
 /**
- * Troca o plano da loja. Manual porque não há billing integrado ainda (ver
- * README > Pendências conhecidas) — "assinar o Pro" hoje é o admin aprovar
- * fora do sistema e vir aqui liberar produtos ilimitados (lib/plans.ts).
+ * Troca o plano da loja por fora do Stripe — cortesia pra um lojista, sua
+ * própria loja, ou qualquer caso em que não deve haver cobrança real. Convive
+ * com o billing de verdade (app/admin/plano): o Stripe continua sendo quem
+ * decide o plano de quem paga, via webhook; isso aqui é a exceção manual.
  */
 export async function updateStorePlanAction(
   storeId: string,
@@ -142,11 +143,88 @@ export async function updateStorePlanAction(
     // Mesma regra do cancelamento via Stripe: mantém os 10 mais antigos ativos.
     await downgradeStoreToFree(storeId);
   } else {
-    await prisma.store.update({ where: { id: storeId }, data: { plan: parsed.data.plan } });
+    // Se sobrou vínculo de uma assinatura Stripe que não está mais em dia
+    // (ex.: cancelada antes), limpa — senão a tela de detalhe mostraria esse
+    // status velho ("Cancelada") em vez de deixar claro que agora é cortesia.
+    // Uma assinatura REALMENTE ativa nunca é tocada aqui.
+    const staleSubscription = !ACTIVE_SUBSCRIPTION_STATUSES.has(store.subscriptionStatus ?? "");
+    await prisma.store.update({
+      where: { id: storeId },
+      data: {
+        plan: parsed.data.plan,
+        ...(staleSubscription ? { stripeSubscriptionId: null, subscriptionStatus: null } : {}),
+      },
+    });
   }
 
   revalidatePath(`/plataforma/lojas/${storeId}`);
   revalidatePath("/plataforma/lojas");
   revalidatePath("/admin/produtos");
+  return { ok: true };
+}
+
+// ─── Inativar / reativar / excluir ─────────────────────────────────────────────
+
+export type SuspendStoreResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Inativa uma loja ativa. Reversível, sem apagar nada: com status !== "active"
+ * a vitrine (resolveStore) e o painel do lojista (getActiveStoreId) já barram
+ * o acesso sozinhos — não precisa desativar produto por produto, e reativar
+ * restaura tudo exatamente como estava.
+ */
+export async function suspendStoreAction(storeId: string): Promise<SuspendStoreResult> {
+  await requirePlatformAdmin();
+
+  const store = await prisma.store.findUnique({ where: { id: storeId } });
+  if (!store) return { ok: false, error: "Loja não encontrada" };
+  if (store.status !== "active") return { ok: false, error: "Só é possível inativar lojas ativas" };
+
+  await prisma.store.update({ where: { id: storeId }, data: { status: "suspended" } });
+
+  revalidatePath(`/plataforma/lojas/${storeId}`);
+  revalidatePath("/plataforma/lojas");
+  return { ok: true };
+}
+
+export async function reactivateStoreAction(storeId: string): Promise<SuspendStoreResult> {
+  await requirePlatformAdmin();
+
+  const store = await prisma.store.findUnique({ where: { id: storeId } });
+  if (!store) return { ok: false, error: "Loja não encontrada" };
+  if (store.status !== "suspended") return { ok: false, error: "Só é possível reativar lojas inativas" };
+
+  await prisma.store.update({ where: { id: storeId }, data: { status: "active" } });
+
+  revalidatePath(`/plataforma/lojas/${storeId}`);
+  revalidatePath("/plataforma/lojas");
+  return { ok: true };
+}
+
+export type DeleteStoreResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Exclui a loja de verdade (cascade no schema apaga produtos, clientes,
+ * carrinhos, pedidos e pagamentos junto). Só permitido se ela NUNCA teve
+ * pedido — mesma regra já usada em deleteProductFormAction: histórico de
+ * venda não é apagável. Com pedido no histórico, a saída é inativar.
+ */
+export async function deleteStoreAction(storeId: string): Promise<DeleteStoreResult> {
+  await requirePlatformAdmin();
+
+  const store = await prisma.store.findUnique({ where: { id: storeId } });
+  if (!store) return { ok: false, error: "Loja não encontrada" };
+
+  const orderCount = await prisma.order.count({ where: { storeId } });
+  if (orderCount > 0) {
+    return {
+      ok: false,
+      error: `Esta loja já teve ${orderCount} pedido(s) — exclusão não é permitida, pra preservar o histórico. Inative em vez disso.`,
+    };
+  }
+
+  await prisma.store.delete({ where: { id: storeId } });
+
+  revalidatePath("/plataforma/lojas");
   return { ok: true };
 }

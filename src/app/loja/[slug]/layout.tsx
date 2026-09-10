@@ -1,4 +1,5 @@
 // app/loja/[slug]/layout.tsx
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -7,6 +8,13 @@ import { currentStore, withStore } from "@/lib/tenant";
 import { currentCustomer } from "@/lib/customer";
 import { getCartWithItems } from "@/lib/cart";
 import { r2Url } from "@/lib/r2";
+
+// currentStore() é cache() do React — mesma chamada que o layout já faz
+// embaixo é reaproveitada aqui, não dispara outra query.
+export async function generateMetadata(): Promise<Metadata> {
+  const store = await currentStore();
+  return { title: store?.name };
+}
 
 function CartIcon() {
   return (

@@ -1,9 +1,14 @@
 // app/plataforma/layout.tsx — área do dono da plataforma (você), separada do
 // /admin de cada tenant. Hoje só a aprovação de lojas em onboarding.
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/auth";
 import { requirePlatformAdmin } from "@/lib/tenant";
+import { SAAS_NAME } from "@/lib/config";
+
+// Estático (sem dado assíncrono) — não precisa de generateMetadata aqui.
+export const metadata: Metadata = { title: `${SAAS_NAME} — Painel Admin` };
 
 export default async function PlataformaLayout({
   children,
@@ -11,12 +16,15 @@ export default async function PlataformaLayout({
   children: React.ReactNode;
 }) {
   const session = await auth();
-  if (!session?.user) redirect("/entrar?callbackUrl=/plataforma/lojas");
+  if (!session?.user) redirect("/plataforma/entrar");
 
   try {
     await requirePlatformAdmin();
   } catch {
-    redirect("/");
+    // Logado, mas com uma conta que não é admin (ex.: sessão de lojista ainda
+    // ativa) — manda pra /plataforma/entrar, que desconecta essa conta errada
+    // e deixa entrar com a certa, em vez de só jogar pra home sem explicação.
+    redirect("/plataforma/entrar");
   }
 
   async function handleSignOut() {

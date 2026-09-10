@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { getActiveStoreId, requireStoreAccess } from "@/lib/tenant";
 import { stripe, isStripeConfigured } from "@/lib/stripe";
 import { baseUrl } from "@/lib/url";
+import { ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/plans";
 
 export type CheckoutResult = { ok: true; url: string } | { ok: false; error: string };
 
@@ -26,7 +27,12 @@ export async function startCheckoutAction(): Promise<CheckoutResult> {
     prisma.user.findUnique({ where: { id: userId } }),
   ]);
   if (!store) return { ok: false, error: "Loja não encontrada" };
-  if (store.plan === "pro") return { ok: false, error: "Esta loja já está no plano Pro" };
+  // Só bloqueia se já existe assinatura Stripe de verdade em dia — um "pro"
+  // dado manualmente (cortesia, ver app/plataforma/actions/stores.ts) não
+  // deve impedir o lojista de assinar de verdade se quiser.
+  if (ACTIVE_SUBSCRIPTION_STATUSES.has(store.subscriptionStatus ?? "")) {
+    return { ok: false, error: "Esta loja já está no plano Pro" };
+  }
 
   let customerId = store.stripeCustomerId;
   if (!customerId) {

@@ -9,7 +9,10 @@ import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/password";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  session: { strategy: "jwt" },
+  // Padrão do Auth.js é 30 dias — reduzido por pedido de segurança. Vale pra
+  // toda sessão (operador e comprador): depois de 7 dias sem logar de novo,
+  // expira sozinha, mesmo sem clicar em "Sair".
+  session: { strategy: "jwt", maxAge: 60 * 60 * 24 * 7 },
   providers: [
     Google,
     // Login por e-mail/senha provisória (onboarding self-service). Google

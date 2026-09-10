@@ -5,6 +5,11 @@ import { prisma } from "@/lib/prisma";
 
 export const FREE_PLAN_PRODUCT_LIMIT = 10;
 
+/** Status do Stripe (Store.subscriptionStatus) que representam uma assinatura
+ *  de verdade em dia — usado tanto pra exibir "Ativa" em vez de status velho,
+ *  quanto pra decidir se um "pro" manual deve limpar vínculo de Stripe obsoleto. */
+export const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);
+
 /** Teto de produtos cadastrados (linhas da tabela, ativos ou não) para o plano.
  *  `null` = sem limite. Só "free" tem teto hoje; qualquer outro plano (pro, ...)
  *  é ilimitado — ajuste aqui se surgirem planos intermediários. */

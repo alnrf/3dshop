@@ -1,7 +1,7 @@
 // app/admin/plano/page.tsx
 import { prisma } from "@/lib/prisma";
 import { getActiveStoreId } from "@/lib/tenant";
-import { productLimitForPlan } from "@/lib/plans";
+import { productLimitForPlan, ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/plans";
 import { isStripeConfigured } from "@/lib/stripe";
 import { PlanActions } from "./plan-actions";
 
@@ -20,6 +20,7 @@ export default async function PlanoPage({
   if (!store) return null;
 
   const limit = productLimitForPlan(store.plan);
+  const hasActiveSubscription = ACTIVE_SUBSCRIPTION_STATUSES.has(store.subscriptionStatus ?? "");
 
   return (
     <main className="mx-auto max-w-md px-6 py-8">
@@ -53,6 +54,9 @@ export default async function PlanoPage({
             {limit !== null ? `${productCount} / ${limit}` : `${productCount} (ilimitado)`}
           </span>
         </div>
+        {store.plan === "pro" && !hasActiveSubscription && (
+          <p className="mt-2 text-xs text-neutral-400">Pro concedido pela plataforma — sem cobrança.</p>
+        )}
         {store.subscriptionStatus && store.plan !== "pro" && (
           <p className="mt-2 text-xs text-neutral-400">Status da última assinatura: {store.subscriptionStatus}</p>
         )}
@@ -71,7 +75,7 @@ export default async function PlanoPage({
       </div>
 
       <div className="mt-6">
-        <PlanActions plan={store.plan} stripeConfigured={isStripeConfigured()} />
+        <PlanActions hasActiveSubscription={hasActiveSubscription} stripeConfigured={isStripeConfigured()} />
       </div>
     </main>
   );
