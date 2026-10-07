@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { auth, signOut } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getActiveStoreId, PasswordChangeRequiredError, StoreNotActiveError } from "@/lib/tenant";
+import { AdminNav } from "./admin-nav";
 
 // Defensivo de propósito: generateMetadata roda em paralelo ao layout (mesmo
 // motivo dos vários "Não autenticado" inofensivos que já vimos nos logs) —
@@ -62,12 +63,7 @@ export default async function AdminLayout({
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
           <span className="text-sm font-medium">Painel da loja</span>
           <nav className="flex gap-5 text-sm text-neutral-600">
-            <Link href="/admin/produtos" className="hover:underline">Produtos</Link>
-            <Link href="/admin/configuracoes/loja" className="hover:underline">Loja</Link>
-            <Link href="/admin/configuracoes/pagamentos" className="hover:underline">Pagamentos</Link>
-            <Link href="/admin/configuracoes/frete" className="hover:underline">Frete</Link>
-            <Link href="/admin/plano" className="hover:underline">Plano</Link>
-            <Link href="/admin/perfil" className="hover:underline">Perfil</Link>
+            <AdminNav />
             {storeSlug && (
               <Link
                 href={`/loja/${storeSlug}`}

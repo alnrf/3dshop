@@ -196,3 +196,43 @@ export async function saveShippingSettingsAction(input: ShippingSettingsInput): 
   revalidatePath("/admin/configuracoes/frete");
   return { ok: true };
 }
+
+// ─── Frete fixo (usado de fato pelo checkout hoje) ─────────────────────────────
+
+const FlatShippingSchema = z.object({
+  flatShippingCents: z.number({ invalid_type_error: "Valor de frete inválido" }).int().min(0).optional(),
+  freeShippingThresholdCents: z.number({ invalid_type_error: "Valor mínimo inválido" }).int().min(0).optional(),
+});
+export type FlatShippingInput = z.input<typeof FlatShippingSchema>;
+export type FlatShippingResult = { ok: true } | { ok: false; error: string };
+
+export async function getFlatShippingAction() {
+  const storeId = await getActiveStoreId();
+  await requireStoreAccess(storeId);
+  const store = await prisma.store.findUnique({
+    where: { id: storeId },
+    select: { flatShippingCents: true, freeShippingThresholdCents: true },
+  });
+  return {
+    flatShippingCents: store?.flatShippingCents ?? null,
+    freeShippingThresholdCents: store?.freeShippingThresholdCents ?? null,
+  };
+}
+
+export async function saveFlatShippingAction(input: FlatShippingInput): Promise<FlatShippingResult> {
+  const storeId = await getActiveStoreId();
+  await requireStoreAccess(storeId);
+
+  const parsed = FlatShippingSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos" };
+
+  await prisma.store.update({
+    where: { id: storeId },
+    data: {
+      flatShippingCents: parsed.data.flatShippingCents ?? null,
+      freeShippingThresholdCents: parsed.data.freeShippingThresholdCents ?? null,
+    },
+  });
+  revalidatePath("/admin/configuracoes/frete");
+  return { ok: true };
+}

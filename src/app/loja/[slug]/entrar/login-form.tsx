@@ -8,7 +8,15 @@ import { loginCustomerAction } from "@/app/actions/customer-auth";
 const input =
   "h-11 w-full rounded-lg border border-stone-300 px-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2";
 
-export function LoginForm({ storeSlug, base }: { storeSlug: string; base: string }) {
+export function LoginForm({
+  storeSlug,
+  base,
+  next,
+}: {
+  storeSlug: string;
+  base: string;
+  next?: string | null;
+}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
@@ -22,7 +30,7 @@ export function LoginForm({ storeSlug, base }: { storeSlug: string; base: string
       // Navegação "dura" (não router.push): o header (layout) já pode estar
       // em cache do lado do cliente com o estado "deslogado" de antes do
       // login — só um reload completo garante que ele releia a sessão nova.
-      window.location.href = `${base}/pos-login`;
+      window.location.href = next ? `${base}/pos-login?next=${encodeURIComponent(next)}` : `${base}/pos-login`;
       return;
     }
     setSaving(false);

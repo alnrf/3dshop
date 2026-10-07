@@ -21,5 +21,12 @@ export async function GET(req: NextRequest) {
       await mergeGuestCartIntoUser(customer.id);
     });
   }
+
+  // Volta pra onde a pessoa estava (ex.: /checkout) em vez de sempre cair na
+  // home — só aceita um destino dentro desta loja, pra não virar open redirect.
+  const next = req.nextUrl.searchParams.get("next");
+  if (next && next.startsWith(base.pathname)) {
+    return NextResponse.redirect(new URL(next, req.url));
+  }
   return NextResponse.redirect(base);
 }

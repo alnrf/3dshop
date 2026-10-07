@@ -124,7 +124,10 @@ export default async function PedidoPage({
           {order.items.map((item) => (
             <li key={item.id} className="flex items-center justify-between py-2 text-sm">
               <span>
-                {item.qty}× {item.product.name}
+                {item.qty}×{" "}
+                <Link href={`${base}/produto/${item.product.slug}`} className="hover:underline">
+                  {item.product.name}
+                </Link>
               </span>
               <span className="tabular-nums">{formatBRL(item.unitPriceCents * item.qty)}</span>
             </li>
@@ -135,6 +138,14 @@ export default async function PedidoPage({
             <dt className="text-stone-500">Subtotal</dt>
             <dd className="tabular-nums">{formatBRL(order.subtotalCents)}</dd>
           </div>
+          {order.couponCode && (
+            <div className="flex justify-between text-green-700">
+              <dt>Cupom {order.couponCode}</dt>
+              <dd className="tabular-nums">
+                {order.couponType === "free_shipping" ? "Frete grátis" : `-${formatBRL(order.discountCents)}`}
+              </dd>
+            </div>
+          )}
           <div className="flex justify-between">
             <dt className="text-stone-500">Frete</dt>
             <dd className="tabular-nums">{formatBRL(order.shippingCents)}</dd>

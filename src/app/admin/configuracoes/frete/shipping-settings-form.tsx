@@ -70,14 +70,16 @@ export function ShippingSettingsForm({ config }: { config: Config }) {
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-8">
-      <h1 className="text-2xl font-medium">Frete</h1>
-      <p className="mt-1 text-sm text-neutral-500">
-        Cadastre as credenciais do serviço de frete desta loja. As chaves ficam
-        encriptadas — nunca são exibidas de volta na tela.
+    <div>
+      <h2 className="text-sm font-medium text-neutral-500">
+        Cotação real por transportadora (futuro)
+      </h2>
+      <p className="mt-1 text-xs text-neutral-400">
+        Credenciais prontas pra quando a cotação automática entrar em uso — hoje o checkout usa só o frete fixo
+        acima. As chaves ficam encriptadas — nunca são exibidas de volta na tela.
       </p>
 
-      <div className="mt-6 space-y-5">
+      <div className="mt-3 space-y-5">
         <fieldset className={fieldsetClass}>
           <legend className={legendClass}>Superfrete</legend>
           <label className="flex items-center gap-2 text-sm">
@@ -164,6 +166,6 @@ export function ShippingSettingsForm({ config }: { config: Config }) {
           {saving ? "Salvando…" : "Salvar"}
         </button>
       </div>
-    </main>
+    </div>
   );
 }

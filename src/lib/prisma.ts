@@ -3,7 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { currentStoreId } from "./tenant-context";
 
 // Models que carregam storeId. A extensão filtra/injeta o tenant só nestes.
-const TENANT_MODELS = new Set(["Product", "Customer", "Cart", "Order"]);
+const TENANT_MODELS = new Set(["Product", "Coupon", "Customer", "Cart", "Order"]);
 
 // Operações cujo `where` pode receber storeId com segurança.
 const WHERE_SCOPED = new Set([

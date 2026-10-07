@@ -29,7 +29,14 @@ model Store {
   paymentConfig  Json?
   // Credenciais/preferência de frete DESTA loja (Superfrete, Melhor Envio, ...).
   // Mesma regra: segredo vai ENCRIPTADO em repouso (ver lib/crypto.ts).
+  // Reservado pra cotação real; o checkout hoje usa flatShippingCents abaixo.
   shippingConfig Json?
+
+  // Frete fixo usado de fato pelo checkout (fase atual, sem cotação real).
+  // Null = lojista não configurou — checkout cai num valor padrão (ver
+  // DEFAULT_FLAT_SHIPPING_CENTS em lib/checkout.ts) em vez de bloquear.
+  flatShippingCents         Int?
+  freeShippingThresholdCents Int?
 
   // Logotipo exibido no navbar do storefront (R2, mesmo padrão do ProductImage.r2Key).
   logoKey String?
@@ -45,6 +52,7 @@ model Store {
 
   memberships Membership[]
   products    Product[]
+  coupons     Coupon[]
   customers   Customer[]
   carts       Cart[]
   orders      Order[]
@@ -64,6 +72,12 @@ model User {
   // porque usuários criados antes desta coluna (seed, Google direto) não têm.
   phone String?
   cnpj  String?
+
+  // Pra contrato ter validade jurídica: CPF de quem assina (CNPJ sozinho não
+  // identifica uma pessoa física) e endereço completo. `name` já guarda o
+  // nome da pessoa responsável — não duplicado aqui.
+  cpf     String?
+  address Json?
 
   // Login por credencial (onboarding self-service). Google não usa nenhum dos dois.
   passwordHash       String?
@@ -137,6 +151,45 @@ model ProductImage {
   position  Int     @default(0)
 
   @@index([productId])
+}
+
+// Desconto no valor final (percentual ou fixo) ou frete grátis. Cadastro e
+// gerenciamento prontos; a APLICAÇÃO no carrinho/checkout fica pra quando o
+// checkout em si existir (hoje é pendência conhecida do projeto — sem
+// checkout, não tem onde validar/consumir o cupom de verdade ainda).
+enum CouponType {
+  percentage // percentOff: 1–100
+  fixed // valueCents: desconto fixo, em centavos
+  free_shipping // zera o frete; percentOff/valueCents ignorados
+}
+
+model Coupon {
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  code String // normalizado maiúsculo no save (ex.: "BEMVINDO10")
+  type CouponType
+
+  percentOff Int? // 1–100, usado quando type = percentage
+  valueCents Int? // centavos, usado quando type = fixed
+
+  active        Boolean   @default(true)
+  startsAt      DateTime?
+  expiresAt     DateTime?
+  maxUses       Int? // null = sem limite de usos
+  usedCount     Int       @default(0)
+  minOrderCents Int? // pedido mínimo pra poder usar — null = sem mínimo
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Pedidos que usaram este cupom (snapshot em Order.couponCode/couponType/
+  // discountCents — ver lá; esta relação é só pra navegação enquanto o cupom existir).
+  orders Order[]
+
+  @@unique([storeId, code]) // código único por loja, não globalmente
+  @@index([storeId, active])
 }
 
 // ─── Compradores (por loja) ───────────────────────────────────────────────────
@@ -244,7 +297,16 @@ model Order {
 
   subtotalCents Int
   shippingCents Int @default(0)
+  discountCents Int @default(0)
   totalCents    Int
+
+  // Cupom aplicado, congelado no momento da compra (code/type), não só
+  // referenciado — deleteCouponFormAction apaga o Coupon sem guarda nenhuma,
+  // então só a FK quebraria a legibilidade do histórico depois de excluído.
+  couponId   String?
+  coupon     Coupon?     @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  couponCode String?
+  couponType CouponType?
 
   paymentStatus     PaymentStatus     @default(pending)
   fulfillmentStatus FulfillmentStatus @default(awaiting_payment)
@@ -265,6 +327,7 @@ model Order {
 
   @@index([storeId, fulfillmentStatus])
   @@index([customerId])
+  @@index([couponId])
 }
 
 model OrderItem {
@@ -290,6 +353,11 @@ model Payment {
   amountCents       Int
   status            PaymentStatus @default(pending)
   rawPayload        Json?
+
+  // Forma de pagamento informada manualmente ao confirmar ("pix" | "cartao" |
+  // "dinheiro") — só preenchido na confirmação manual (sem gateway ainda);
+  // distinto de `provider`, que identifica o gateway quando houver um de verdade.
+  method String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

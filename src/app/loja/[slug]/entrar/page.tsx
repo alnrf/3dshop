@@ -7,22 +7,31 @@ import { currentStore, withStore } from "@/lib/tenant";
 import { currentCustomer } from "@/lib/customer";
 import { LoginForm } from "./login-form";
 
-export default async function EntrarPage() {
+export default async function EntrarPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
   const store = await currentStore();
   if (!store) notFound();
   const base = `/loja/${store.slug}`;
+  const { next } = await searchParams;
+  const safeNext = next && next.startsWith(base) ? next : null;
 
   // Checa se já é Customer DESTA loja — não basta ter sessão: um operador
   // logado no /admin (mesma conta Google) também tem `session.user`, mas não
   // é cliente da própria loja, e não pode ser barrado daqui.
   const session = await auth();
   const customer = await withStore(() => currentCustomer(session?.user?.email));
-  if (customer) redirect(base);
+  if (customer) redirect(safeNext ?? base);
 
   async function loginGoogle() {
     "use server";
     // Pós-login passa por /pos-login, que funde o carrinho de convidado.
-    await signIn("google", { redirectTo: `${base}/pos-login` });
+    const redirectTo = safeNext
+      ? `${base}/pos-login?next=${encodeURIComponent(safeNext)}`
+      : `${base}/pos-login`;
+    await signIn("google", { redirectTo });
   }
 
   return (
@@ -33,7 +42,7 @@ export default async function EntrarPage() {
       </p>
 
       <div className="mt-8">
-        <LoginForm storeSlug={store.slug} base={base} />
+        <LoginForm storeSlug={store.slug} base={base} next={safeNext} />
       </div>
 
       <div className="mt-6 flex items-center gap-3 text-xs text-stone-400">
@@ -50,7 +59,10 @@ export default async function EntrarPage() {
 
       <p className="mt-6 text-xs text-stone-400">
         Ainda não tem conta?{" "}
-        <Link href={`${base}/registrar`} className="underline-offset-2 hover:underline">
+        <Link
+          href={safeNext ? `${base}/registrar?next=${encodeURIComponent(safeNext)}` : `${base}/registrar`}
+          className="underline-offset-2 hover:underline"
+        >
           Cadastre-se
         </Link>
       </p>

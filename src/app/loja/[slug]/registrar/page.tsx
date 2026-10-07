@@ -7,17 +7,23 @@ import { currentStore, withStore } from "@/lib/tenant";
 import { currentCustomer } from "@/lib/customer";
 import { RegisterForm } from "./register-form";
 
-export default async function RegistrarPage() {
+export default async function RegistrarPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
   const store = await currentStore();
   if (!store) notFound();
   const base = `/loja/${store.slug}`;
+  const { next } = await searchParams;
+  const safeNext = next && next.startsWith(base) ? next : null;
 
   // Mesma checagem de entrar/page.tsx: só redireciona se já for Customer
   // DESTA loja, não apenas por ter alguma sessão (operador logado no /admin
   // com a mesma conta não deve ser barrado de se cadastrar como cliente).
   const session = await auth();
   const customer = await withStore(() => currentCustomer(session?.user?.email));
-  if (customer) redirect(base);
+  if (customer) redirect(safeNext ?? base);
 
   return (
     <main className="mx-auto max-w-sm px-4 py-16 text-center">
@@ -27,12 +33,15 @@ export default async function RegistrarPage() {
       </p>
 
       <div className="mt-8">
-        <RegisterForm storeSlug={store.slug} base={base} />
+        <RegisterForm storeSlug={store.slug} base={base} next={safeNext} />
       </div>
 
       <p className="mt-6 text-xs text-stone-400">
         Já tem conta?{" "}
-        <Link href={`${base}/entrar`} className="underline-offset-2 hover:underline">
+        <Link
+          href={safeNext ? `${base}/entrar?next=${encodeURIComponent(safeNext)}` : `${base}/entrar`}
+          className="underline-offset-2 hover:underline"
+        >
           Entrar
         </Link>
       </p>
