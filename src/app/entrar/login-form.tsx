@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import { loginOperatorAction } from "@/app/actions/operator-auth";
+import { PasswordInput } from "@/components/password-input";
 
 const input =
   "h-11 w-full rounded-lg border border-neutral-300 px-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2";
@@ -37,8 +38,7 @@ export function LoginForm({ returnTo }: { returnTo: string }) {
         value={email}
         onChange={(e) => setEmail(e.target.value)}
       />
-      <input
-        type="password"
+      <PasswordInput
         placeholder="Senha"
         className={input}
         value={password}

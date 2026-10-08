@@ -3,3 +3,18 @@
 :root {
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
+
+/* Browsers não dão cursor:pointer a <button> por padrão (só a <a href>) — aqui
+   garantimos isso globalmente. Fica em @layer base pra utilities do Tailwind
+   (ex.: disabled:cursor-not-allowed) continuarem podendo sobrescrever. */
+@layer base {
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role="button"][aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+}
