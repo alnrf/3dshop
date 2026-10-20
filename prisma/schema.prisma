@@ -29,12 +29,21 @@ model Store {
   paymentConfig  Json?
   // Credenciais/preferência de frete DESTA loja (Superfrete, Melhor Envio, ...).
   // Mesma regra: segredo vai ENCRIPTADO em repouso (ver lib/crypto.ts).
-  // Reservado pra cotação real; o checkout hoje usa flatShippingCents abaixo.
+  // Cotação real (SuperFrete) usa isso + originCep; sem isso configurado o
+  // checkout cai no frete fixo abaixo.
   shippingConfig Json?
+  // CEP de origem da loja — necessário pra cotar frete de verdade (SuperFrete/
+  // Melhor Envio). Sem ele, cotação real não roda mesmo com provider ativo.
+  originCep String?
+  // Resto do endereço de remetente (nome vem de Store.name) — necessário só
+  // pra GERAR etiqueta de verdade (POST /cart da SuperFrete), não pra cotar.
+  // Formato: { street, number, complement, district, city, stateAbbr, phone, document }.
+  originAddress Json?
 
-  // Frete fixo usado de fato pelo checkout (fase atual, sem cotação real).
-  // Null = lojista não configurou — checkout cai num valor padrão (ver
-  // DEFAULT_FLAT_SHIPPING_CENTS em lib/checkout.ts) em vez de bloquear.
+  // Frete fixo usado como fallback quando não há cotação real (provider não
+  // configurado, cotação falhou, ou falta originCep). Null = lojista não
+  // configurou — checkout cai num valor padrão (ver DEFAULT_FLAT_SHIPPING_CENTS
+  // em lib/checkout.ts) em vez de bloquear.
   flatShippingCents         Int?
   freeShippingThresholdCents Int?
 
@@ -316,8 +325,23 @@ model Order {
   madeToOrder       Boolean           @default(false)
 
   shippingAddress         Json
+  // Qual API cotou de verdade ("superfrete" | "melhorenvio") — null quando
+  // foi o frete fixo. serviceId sozinho não diz de qual API veio (o mesmo
+  // número pode significar serviços diferentes em cada uma); necessário pra
+  // uma futura geração de etiqueta saber pra qual API mandar o pedido.
+  shippingProvider        String?
+  // Serviço/transportadora escolhido na cotação real (ex.: "PAC — Correios"),
+  // só informativo — null quando o frete foi o valor fixo (sem cotação real).
+  shippingServiceName     String?
+  // Id numérico do serviço (ex.: 1 = PAC) — é o que a API de COMPRA de
+  // etiqueta exige; shippingServiceName é só o texto formatado pra exibir.
+  shippingServiceId       Int?
   trackingCode            String?
+  // Id da etiqueta do lado da SuperFrete (resposta do POST /cart).
   shippingProviderOrderId String?
+  // URL do PDF da etiqueta (resposta do POST /checkout) — fica salva pra o
+  // lojista baixar de novo sem precisar gerar outra vez.
+  shippingLabelUrl        String?
 
   items    OrderItem[]
   payments Payment[]

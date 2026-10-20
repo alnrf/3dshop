@@ -1,7 +1,9 @@
 import { getPaymentSettingsAction } from "@/app/admin/actions/settings";
+import { getActiveStoreId } from "@/lib/tenant";
 import { PaymentSettingsForm } from "./payment-settings-form";
 
 export default async function ConfiguracoesPagamentosPage() {
-  const config = await getPaymentSettingsAction(); // acesso já barrado no layout do admin
-  return <PaymentSettingsForm config={config} />;
+  const storeId = await getActiveStoreId(); // acesso já barrado no layout do admin
+  const config = await getPaymentSettingsAction();
+  return <PaymentSettingsForm config={config} storeId={storeId} />;
 }

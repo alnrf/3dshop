@@ -10,6 +10,67 @@ import { currentCustomer } from "@/lib/customer";
 import { getCartWithItems } from "@/lib/cart";
 import { validateCoupon, consumeCoupon } from "@/lib/coupons";
 import { DEFAULT_FLAT_SHIPPING_CENTS } from "@/lib/checkout";
+import { stripeClientFromConfig } from "@/lib/store-stripe";
+import { quoteShipping } from "@/lib/superfrete";
+import { quoteMelhorEnvio } from "@/lib/melhor-envio";
+import type { ShippingOption } from "@/lib/shipping-types";
+import { decryptSecret } from "@/lib/crypto";
+import { baseUrl } from "@/lib/url";
+import type { PaymentConfig, ShippingConfig } from "@/app/admin/actions/settings";
+
+type ShippingItem = { weightGrams: number; widthCm: number; heightCm: number; lengthCm: number; qty: number };
+
+/** Config presente o bastante pra tentar cotar (sem rede ainda) — distingue
+ *  "loja não usa cotação real" (cai pro frete fixo em silêncio) de
+ *  "configurado mas a chamada falhou" (mostra erro, pede pra tentar de novo). */
+function shippingProviderApplicable(shippingConfig: ShippingConfig | null, originCep: string | null): boolean {
+  if (!originCep) return false;
+  const active = shippingConfig?.activeProvider;
+  if (active === "superfrete") {
+    const cfg = shippingConfig?.providers?.superfrete;
+    return Boolean(cfg?.enabled && cfg.apiToken);
+  }
+  if (active === "melhorenvio") {
+    const cfg = shippingConfig?.providers?.melhorenvio;
+    return Boolean(cfg?.enabled && cfg.apiToken);
+  }
+  return false;
+}
+
+/** Dispatcher único: decide qual provider cotar. Só chamar depois de
+ *  confirmar shippingProviderApplicable — aqui já assume que tem o que precisa. */
+async function getShippingOptions(params: {
+  shippingConfig: ShippingConfig | null;
+  originCep: string;
+  destinationCep: string;
+  items: ShippingItem[];
+}): Promise<ShippingOption[] | null> {
+  const active = params.shippingConfig?.activeProvider;
+
+  if (active === "superfrete") {
+    const sfCfg = params.shippingConfig!.providers.superfrete!;
+    return quoteShipping({
+      sandbox: sfCfg.sandbox,
+      apiToken: decryptSecret(sfCfg.apiToken!),
+      originCep: params.originCep,
+      destinationCep: params.destinationCep,
+      items: params.items,
+    });
+  }
+
+  if (active === "melhorenvio") {
+    const meCfg = params.shippingConfig!.providers.melhorenvio!;
+    return quoteMelhorEnvio({
+      sandbox: meCfg.sandbox,
+      apiToken: decryptSecret(meCfg.apiToken!),
+      originCep: params.originCep,
+      destinationCep: params.destinationCep,
+      items: params.items,
+    });
+  }
+
+  return null;
+}
 
 const AddressSchema = z.object({
   cep: z.string().min(1, "Informe o CEP"),
@@ -24,9 +85,13 @@ const AddressSchema = z.object({
 const CreateOrderSchema = z.object({
   address: AddressSchema,
   couponCode: z.string().optional(),
+  // Só o id do serviço escolhido — nunca o preço, que o servidor recota na hora de confirmar.
+  shippingServiceId: z.coerce.number().optional(),
 });
 export type CreateOrderInput = z.input<typeof CreateOrderSchema>;
-export type CreateOrderResult = { ok: true; orderId: string } | { ok: false; error: string };
+export type CreateOrderResult =
+  | { ok: true; orderId: string; redirectUrl?: string }
+  | { ok: false; error: string };
 
 export type CouponPreviewResult =
   | { ok: true; discountCents: number; freeShipping: boolean }
@@ -49,6 +114,50 @@ export async function previewCouponAction(code: string): Promise<CouponPreviewRe
   return result ?? { ok: false, error: "Loja não encontrada" };
 }
 
+export type ShippingPreviewResult =
+  | { ok: true; applicable: true; options: ShippingOption[] }
+  | { ok: true; applicable: false } // loja não usa SuperFrete — form mantém o frete fixo de hoje
+  | { ok: false; error: string };
+
+/** Cotação real no form, antes de finalizar — mesmo padrão de previewCouponAction. */
+export async function previewShippingAction(cep: string): Promise<ShippingPreviewResult> {
+  const session = await auth();
+  const result = await withStore(async (storeId) => {
+    const customer = await currentCustomer(session?.user?.email);
+    if (!customer) return { ok: false as const, error: "Entre para calcular o frete" };
+    const cart = await getCartWithItems(customer.id);
+    if (cart.items.length === 0) return { ok: false as const, error: "Carrinho vazio" };
+
+    const store = await prisma.store.findUnique({
+      where: { id: storeId },
+      select: { originCep: true, shippingConfig: true },
+    });
+    const shippingConfig = store?.shippingConfig as ShippingConfig | null;
+    const originCep = store?.originCep ?? null;
+    if (!shippingProviderApplicable(shippingConfig, originCep)) {
+      return { ok: true as const, applicable: false as const };
+    }
+
+    const options = await getShippingOptions({
+      shippingConfig,
+      originCep: originCep!,
+      destinationCep: cep,
+      items: cart.items.map((i) => ({
+        weightGrams: i.product.weightGrams,
+        widthCm: i.product.widthCm,
+        heightCm: i.product.heightCm,
+        lengthCm: i.product.lengthCm,
+        qty: i.qty,
+      })),
+    });
+    if (!options || options.length === 0) {
+      return { ok: false as const, error: "Não foi possível calcular o frete para este CEP." };
+    }
+    return { ok: true as const, applicable: true as const, options };
+  });
+  return result ?? { ok: false, error: "Loja não encontrada" };
+}
+
 export async function createOrderAction(input: CreateOrderInput): Promise<CreateOrderResult> {
   const parsed = CreateOrderSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dados inválidos" };
@@ -66,8 +175,54 @@ export async function createOrderAction(input: CreateOrderInput): Promise<Create
     if (cart.items.length === 0 || !cart.id) return { ok: false as const, error: "Carrinho vazio" };
     const cartId = cart.id;
 
+    const store = await prisma.store.findUnique({
+      where: { id: storeId },
+      select: {
+        slug: true,
+        flatShippingCents: true,
+        freeShippingThresholdCents: true,
+        paymentConfig: true,
+        shippingConfig: true,
+        originCep: true,
+      },
+    });
+    if (!store) return { ok: false as const, error: "Loja não encontrada" };
+
+    // Recotação no servidor — o client manda só o serviceId escolhido, nunca
+    // o preço. Chamada de rede fica FORA da transação de propósito (mesmo
+    // princípio já seguido pro Stripe). Se não achar/falhar, cai pro frete
+    // fixo abaixo sem travar o pedido.
+    let quotedShippingCents: number | null = null;
+    let shippingServiceName: string | undefined;
+    let shippingServiceId: number | undefined;
+    let shippingProvider: string | undefined;
+    const shippingConfig = store.shippingConfig as ShippingConfig | null;
+    const originCep = store.originCep;
+    if (shippingProviderApplicable(shippingConfig, originCep) && parsed.data.shippingServiceId != null) {
+      const options = await getShippingOptions({
+        shippingConfig,
+        originCep: originCep!,
+        destinationCep: parsed.data.address.cep,
+        items: cart.items.map((i) => ({
+          weightGrams: i.product.weightGrams,
+          widthCm: i.product.widthCm,
+          heightCm: i.product.heightCm,
+          lengthCm: i.product.lengthCm,
+          qty: i.qty,
+        })),
+      });
+      const chosen = options?.find((o) => o.serviceId === parsed.data.shippingServiceId);
+      if (chosen) {
+        quotedShippingCents = chosen.priceCents;
+        shippingServiceName = `${chosen.name} — ${chosen.company}`;
+        shippingServiceId = chosen.serviceId;
+        shippingProvider = shippingConfig!.activeProvider!;
+      }
+    }
+
+    let txResult;
     try {
-      return await prisma.$transaction(async (tx) => {
+      txResult = await prisma.$transaction(async (tx) => {
         let subtotalCents = 0;
         const lines: { productId: string; qty: number; unitPriceCents: number; name: string }[] = [];
         for (const item of cart.items) {
@@ -102,24 +257,43 @@ export async function createOrderAction(input: CreateOrderInput): Promise<Create
           couponType = v.coupon.type;
         }
 
-        const store = await tx.store.findUnique({
-          where: { id: storeId },
-          select: { flatShippingCents: true, freeShippingThresholdCents: true },
-        });
-        const threshold = store?.freeShippingThresholdCents;
-        let shippingCents =
-          threshold != null && subtotalCents >= threshold
-            ? 0
-            : store?.flatShippingCents ?? DEFAULT_FLAT_SHIPPING_CENTS;
+        // Prioridade: limite de frete grátis > cotação real já feita acima >
+        // frete fixo de fallback; cupom free_shipping sempre vence por último.
+        const threshold = store.freeShippingThresholdCents;
+        const overThreshold = threshold != null && subtotalCents >= threshold;
+        let shippingCents: number;
+        if (overThreshold) {
+          shippingCents = 0;
+        } else if (quotedShippingCents != null) {
+          shippingCents = quotedShippingCents;
+        } else {
+          shippingCents = store.flatShippingCents ?? DEFAULT_FLAT_SHIPPING_CENTS;
+        }
         if (freeShipping) shippingCents = 0;
 
         const totalCents = subtotalCents - discountCents + shippingCents;
 
+        // Stripe só entra se for o provider ativo da loja E estiver de fato
+        // configurado (chave salva) — qualquer outro caso cai no fluxo manual
+        // de hoje (lojista confirma o pagamento em /admin/pedidos).
+        const paymentConfig = store.paymentConfig as PaymentConfig | null;
+        const stripeCfg = paymentConfig?.providers?.stripe;
+        const useStripe = Boolean(
+          paymentConfig?.activeProvider === "stripe" && stripeCfg?.enabled && stripeCfg?.secretKey,
+        );
+
         const order = await tx.order.create({
           data: {
+            // Explícito (a extensão de tenant também injetaria sozinha em
+            // create, mas aqui precisamos do tipo certo pro `include` abaixo
+            // funcionar — mesmo princípio de requireStoreId() em lib/cart.ts).
+            storeId,
             customerId: customer.id,
             subtotalCents,
             shippingCents,
+            shippingServiceName,
+            shippingServiceId,
+            shippingProvider,
             discountCents,
             totalCents,
             madeToOrder,
@@ -128,8 +302,9 @@ export async function createOrderAction(input: CreateOrderInput): Promise<Create
             couponType,
             shippingAddress: { recipient: name ?? customer.name, ...parsed.data.address },
             items: { create: lines.map(({ productId, qty, unitPriceCents }) => ({ productId, qty, unitPriceCents })) },
-            payments: { create: { amountCents: totalCents, status: "pending" } },
+            payments: { create: { amountCents: totalCents, status: "pending", provider: useStripe ? "stripe" : "manual" } },
           },
+          include: { payments: true },
         });
 
         for (const line of lines) {
@@ -142,12 +317,91 @@ export async function createOrderAction(input: CreateOrderInput): Promise<Create
 
         await tx.cartItem.deleteMany({ where: { cartId } });
 
-        return { ok: true as const, orderId: order.id };
+        return {
+          ok: true as const,
+          orderId: order.id,
+          paymentId: order.payments[0].id,
+          totalCents,
+          shippingCents,
+          discountCents,
+          couponCode,
+          lines,
+          useStripe,
+          stripeCfg,
+          storeSlug: store.slug,
+        };
       });
     } catch (e) {
       if (e instanceof CheckoutError) return { ok: false as const, error: e.message };
       console.error("Falha ao criar pedido:", e);
       return { ok: false as const, error: "Não foi possível concluir o pedido. Tente novamente." };
+    }
+
+    if (!txResult.ok) return txResult;
+    if (!txResult.useStripe) return { ok: true as const, orderId: txResult.orderId };
+
+    // Chamada de rede fica FORA da transação de propósito — nunca segurar
+    // conexão/lock de banco esperando o Stripe responder. O pedido já existe
+    // (pending) nesse ponto; se o Stripe falhar aqui, devolvemos erro honesto
+    // em vez de mascarar — o pedido fica visível em /admin/pedidos mesmo assim.
+    try {
+      const stripeClient = stripeClientFromConfig(txResult.stripeCfg)!;
+      const base = `/loja/${txResult.storeSlug}`;
+      const origin = await baseUrl();
+
+      // Itemizado por produto (mesmo preço já congelado no pedido) + frete
+      // como linha própria — a soma bate com totalCents por construção, são
+      // os mesmos números só redistribuídos, nada recalculado do zero aqui.
+      const lineItems: Array<{
+        price_data: { currency: string; unit_amount: number; product_data: { name: string } };
+        quantity: number;
+      }> = txResult.lines.map((line) => ({
+        price_data: { currency: "brl", unit_amount: line.unitPriceCents, product_data: { name: line.name } },
+        quantity: line.qty,
+      }));
+      if (txResult.shippingCents > 0) {
+        lineItems.push({
+          price_data: { currency: "brl", unit_amount: txResult.shippingCents, product_data: { name: "Frete" } },
+          quantity: 1,
+        });
+      }
+
+      // Desconto do cupom vira um Coupon avulso no Stripe (amount_off fixo,
+      // uso único) — é o único jeito de aplicar um abatimento em dinheiro
+      // sobre a soma dos itens no Checkout; não dá pra usar linha negativa.
+      let discounts: Array<{ coupon: string }> | undefined;
+      if (txResult.discountCents > 0) {
+        const stripeCoupon = await stripeClient.coupons.create({
+          amount_off: txResult.discountCents,
+          currency: "brl",
+          duration: "once",
+          name: txResult.couponCode ?? "Desconto",
+        });
+        discounts = [{ coupon: stripeCoupon.id }];
+      }
+
+      const checkoutSession = await stripeClient.checkout.sessions.create({
+        mode: "payment",
+        payment_method_types: txResult.stripeCfg?.acceptPix ? ["card", "pix"] : ["card"],
+        line_items: lineItems,
+        discounts,
+        success_url: `${origin}${base}/pedido/${txResult.orderId}`,
+        cancel_url: `${origin}${base}/checkout`,
+        metadata: { storeId, orderId: txResult.orderId, paymentId: txResult.paymentId },
+      });
+
+      await prisma.payment.updateMany({
+        where: { id: txResult.paymentId, orderId: txResult.orderId },
+        data: { providerPaymentId: checkoutSession.id },
+      });
+
+      return { ok: true as const, orderId: txResult.orderId, redirectUrl: checkoutSession.url! };
+    } catch (e) {
+      console.error("Falha ao criar sessão de pagamento Stripe:", e);
+      return {
+        ok: false as const,
+        error: "Pedido registrado, mas não foi possível abrir o pagamento. Tente novamente ou fale com a loja.",
+      };
     }
   });
 

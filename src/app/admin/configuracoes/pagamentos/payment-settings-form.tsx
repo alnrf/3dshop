@@ -1,7 +1,7 @@
 // app/admin/configuracoes/pagamentos/payment-settings-form.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   savePaymentSettingsAction,
   type PaymentSettingsInput,
@@ -13,11 +13,18 @@ type Config = Awaited<ReturnType<typeof getPaymentSettingsAction>>;
 
 type ProviderId = "stripe" | "pagseguro" | "mercadopago";
 
-export function PaymentSettingsForm({ config }: { config: Config }) {
+export function PaymentSettingsForm({ config, storeId }: { config: Config; storeId: string }) {
   const [activeProvider, setActiveProvider] = useState<ProviderId | null>(config.activeProvider);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState("");
+
+  // Origin só existe no browser — preenche depois de montar, pra não quebrar
+  // o render no servidor (é só texto informativo pro lojista copiar).
+  useEffect(() => {
+    setWebhookUrl(`${window.location.origin}/api/webhooks/store-stripe/${storeId}`);
+  }, [storeId]);
 
   const [stripe, setStripe] = useState({
     enabled: config.stripe.enabled,
@@ -26,6 +33,9 @@ export function PaymentSettingsForm({ config }: { config: Config }) {
     value: "",
     clear: false,
     configured: config.stripe.secretKeyConfigured,
+    webhookValue: "",
+    webhookClear: false,
+    webhookConfigured: config.stripe.webhookSecretConfigured,
   });
   const [pagseguro, setPagseguro] = useState({
     enabled: config.pagseguro.enabled,
@@ -60,6 +70,8 @@ export function PaymentSettingsForm({ config }: { config: Config }) {
         publishableKey: stripe.publishableKey,
         value: stripe.value,
         clear: stripe.clear,
+        webhookValue: stripe.webhookValue,
+        webhookClear: stripe.webhookClear,
       },
       pagseguro: {
         enabled: pagseguro.enabled,
@@ -78,7 +90,15 @@ export function PaymentSettingsForm({ config }: { config: Config }) {
     setSaving(false);
     if (res.ok) {
       setSaved(true);
-      setStripe((s) => ({ ...s, value: "", clear: false, configured: s.clear ? false : s.value ? true : s.configured }));
+      setStripe((s) => ({
+        ...s,
+        value: "",
+        clear: false,
+        configured: s.clear ? false : s.value ? true : s.configured,
+        webhookValue: "",
+        webhookClear: false,
+        webhookConfigured: s.webhookClear ? false : s.webhookValue ? true : s.webhookConfigured,
+      }));
       setPagseguro((s) => ({ ...s, value: "", clear: false, configured: s.clear ? false : s.value ? true : s.configured }));
       setMercadopago((s) => ({ ...s, value: "", clear: false, configured: s.clear ? false : s.value ? true : s.configured }));
     } else {
@@ -130,6 +150,24 @@ export function PaymentSettingsForm({ config }: { config: Config }) {
             />
             Aceitar Pix via Stripe
           </label>
+
+          <div className="rounded-lg bg-neutral-50 p-3">
+            <label className={labelClass}>URL do webhook</label>
+            <p className="mt-1 break-all font-mono text-xs text-neutral-600">{webhookUrl || "carregando…"}</p>
+            <p className="mt-1 text-xs text-neutral-400">
+              Cadastre essa URL em Developers → Webhooks no seu Dashboard Stripe (evento{" "}
+              <code className="font-mono">checkout.session.completed</code>) e cole abaixo o "Signing secret" que ele
+              gerar.
+            </p>
+          </div>
+          <SecretField
+            label="Webhook secret"
+            placeholder="whsec_…"
+            value={stripe.webhookValue}
+            configured={stripe.webhookConfigured && !stripe.webhookClear}
+            onChange={(v) => setStripe((s) => ({ ...s, webhookValue: v, webhookClear: false }))}
+            onRemove={() => setStripe((s) => ({ ...s, webhookValue: "", webhookClear: true, webhookConfigured: false }))}
+          />
         </fieldset>
 
         <fieldset className={fieldsetClass}>

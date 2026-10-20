@@ -4,6 +4,7 @@
 "use server";
 
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireStoreAccess, getActiveStoreId } from "@/lib/tenant";
@@ -11,10 +12,16 @@ import { encryptSecret } from "@/lib/crypto";
 
 // ─── Pagamento ────────────────────────────────────────────────────────────────
 
-type PaymentConfig = {
+export type PaymentConfig = {
   activeProvider: "stripe" | "pagseguro" | "mercadopago" | null;
   providers: {
-    stripe?: { enabled: boolean; acceptPix: boolean; publishableKey?: string; secretKey?: string };
+    stripe?: {
+      enabled: boolean;
+      acceptPix: boolean;
+      publishableKey?: string;
+      secretKey?: string;
+      webhookSecret?: string;
+    };
     pagseguro?: { enabled: boolean; acceptPix: boolean; token?: string };
     mercadopago?: { enabled: boolean; acceptPix: boolean; accessToken?: string };
   };
@@ -29,7 +36,13 @@ const ProviderFieldSchema = z.object({
 
 const PaymentSettingsSchema = z.object({
   activeProvider: z.enum(["stripe", "pagseguro", "mercadopago"]).nullable(),
-  stripe: ProviderFieldSchema.extend({ publishableKey: z.string().optional() }),
+  stripe: ProviderFieldSchema.extend({
+    publishableKey: z.string().optional(),
+    // Segredo separado do secretKey (chave de API) — vem do endpoint de
+    // webhook que o lojista cadastra na própria conta Stripe dele.
+    webhookValue: z.string().optional(),
+    webhookClear: z.boolean().optional(),
+  }),
   pagseguro: ProviderFieldSchema,
   mercadopago: ProviderFieldSchema,
 });
@@ -65,6 +78,7 @@ export async function getPaymentSettingsAction() {
       acceptPix: p.stripe?.acceptPix ?? false,
       publishableKey: p.stripe?.publishableKey ?? "",
       secretKeyConfigured: Boolean(p.stripe?.secretKey),
+      webhookSecretConfigured: Boolean(p.stripe?.webhookSecret),
     },
     pagseguro: {
       enabled: p.pagseguro?.enabled ?? false,
@@ -100,6 +114,7 @@ export async function savePaymentSettingsAction(input: PaymentSettingsInput): Pr
         acceptPix: data.stripe.acceptPix,
         publishableKey: data.stripe.publishableKey || ex.stripe?.publishableKey,
         secretKey: resolveSecret(ex.stripe?.secretKey, data.stripe.value, data.stripe.clear),
+        webhookSecret: resolveSecret(ex.stripe?.webhookSecret, data.stripe.webhookValue, data.stripe.webhookClear),
       },
       pagseguro: {
         enabled: data.pagseguro.enabled,
@@ -121,10 +136,15 @@ export async function savePaymentSettingsAction(input: PaymentSettingsInput): Pr
 
 // ─── Frete ────────────────────────────────────────────────────────────────────
 
-type ShippingConfig = {
+export type ShippingConfig = {
   activeProvider: "superfrete" | "melhorenvio" | null;
   providers: {
     superfrete?: { enabled: boolean; sandbox: boolean; apiToken?: string };
+    // Token de acesso pessoal colado pelo lojista (Permissões de acesso no
+    // painel Melhor Envio) — mesmo modelo do SuperFrete. O Melhor Envio
+    // também oferece OAuth2 completo, mas o app de teste cadastrado nesta
+    // sessão deu "invalid_client" persistente; o token pessoal funcionou de
+    // primeira e evita essa complexidade por ora (ver lib/melhor-envio.ts).
     melhorenvio?: { enabled: boolean; sandbox: boolean; apiToken?: string };
   };
 };
@@ -136,8 +156,21 @@ const ShippingProviderSchema = z.object({
   clear: z.boolean().optional(),
 });
 
+const OriginAddressSchema = z.object({
+  street: z.string().optional(),
+  number: z.string().optional(),
+  complement: z.string().optional(),
+  district: z.string().optional(),
+  city: z.string().optional(),
+  stateAbbr: z.string().optional(),
+  phone: z.string().optional(),
+  document: z.string().optional(),
+});
+
 const ShippingSettingsSchema = z.object({
   activeProvider: z.enum(["superfrete", "melhorenvio"]).nullable(),
+  originCep: z.string().optional(),
+  originAddress: OriginAddressSchema,
   superfrete: ShippingProviderSchema,
   melhorenvio: ShippingProviderSchema,
 });
@@ -147,9 +180,22 @@ export async function getShippingSettingsAction() {
   const storeId = await getActiveStoreId();
   await requireStoreAccess(storeId);
   const { shipping } = await loadStoreConfigs(storeId);
+  const store = await prisma.store.findUnique({ where: { id: storeId }, select: { originCep: true, originAddress: true } });
   const p = shipping.providers;
+  const originAddress = (store?.originAddress as z.infer<typeof OriginAddressSchema> | null) ?? {};
   return {
     activeProvider: shipping.activeProvider,
+    originCep: store?.originCep ?? "",
+    originAddress: {
+      street: originAddress.street ?? "",
+      number: originAddress.number ?? "",
+      complement: originAddress.complement ?? "",
+      district: originAddress.district ?? "",
+      city: originAddress.city ?? "",
+      stateAbbr: originAddress.stateAbbr ?? "",
+      phone: originAddress.phone ?? "",
+      document: originAddress.document ?? "",
+    },
     superfrete: {
       enabled: p.superfrete?.enabled ?? false,
       sandbox: p.superfrete?.sandbox ?? false,
@@ -192,7 +238,26 @@ export async function saveShippingSettingsAction(input: ShippingSettingsInput): 
     },
   };
 
-  await prisma.store.update({ where: { id: storeId }, data: { shippingConfig: next } });
+  const hasOriginAddress = Boolean(data.originAddress.street?.trim());
+  await prisma.store.update({
+    where: { id: storeId },
+    data: {
+      shippingConfig: next,
+      originCep: data.originCep?.replace(/\D/g, "") || null,
+      originAddress: hasOriginAddress
+        ? {
+            street: data.originAddress.street?.trim() ?? "",
+            number: data.originAddress.number?.trim() || undefined,
+            complement: data.originAddress.complement?.trim() || undefined,
+            district: data.originAddress.district?.trim() ?? "",
+            city: data.originAddress.city?.trim() ?? "",
+            stateAbbr: data.originAddress.stateAbbr?.trim().toUpperCase() ?? "",
+            phone: data.originAddress.phone?.replace(/\D/g, "") || undefined,
+            document: data.originAddress.document?.replace(/\D/g, "") || undefined,
+          }
+        : Prisma.JsonNull,
+    },
+  });
   revalidatePath("/admin/configuracoes/frete");
   return { ok: true };
 }

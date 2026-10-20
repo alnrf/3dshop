@@ -1,10 +1,11 @@
 // app/loja/[slug]/checkout/checkout-form.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { createOrderAction, previewCouponAction } from "@/app/actions/checkout";
+import { createOrderAction, previewCouponAction, previewShippingAction } from "@/app/actions/checkout";
+import type { ShippingOption } from "@/lib/superfrete";
 import { maskCep, formatBRL } from "@/lib/format";
 import type { CustomerAddress } from "@/lib/customer";
 
@@ -49,6 +50,13 @@ export function CheckoutForm({
   const [cepLoading, setCepLoading] = useState(false);
   const [cepError, setCepError] = useState<string | null>(null);
 
+  // null = ainda não checou; false = loja não usa cotação real (frete fixo de sempre).
+  const [shippingApplicable, setShippingApplicable] = useState<boolean | null>(null);
+  const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
+  const [selectedShippingId, setSelectedShippingId] = useState<number | null>(null);
+  const [shippingLoading, setShippingLoading] = useState(false);
+  const [shippingError, setShippingError] = useState<string | null>(null);
+
   const [couponInput, setCouponInput] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState<string | null>(null);
@@ -59,6 +67,23 @@ export function CheckoutForm({
 
   function set<K extends keyof typeof form>(key: K, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  async function fetchShippingOptions(digits: string) {
+    setShippingError(null);
+    setShippingLoading(true);
+    const res = await previewShippingAction(digits);
+    setShippingLoading(false);
+    if (!res.ok) {
+      setShippingApplicable(null);
+      setShippingError(res.error);
+      return;
+    }
+    setShippingApplicable(res.applicable);
+    if (res.applicable) {
+      setShippingOptions(res.options);
+      setSelectedShippingId((current) => (res.options.some((o) => o.serviceId === current) ? current : null));
+    }
   }
 
   async function handleCepBlur() {
@@ -85,7 +110,15 @@ export function CheckoutForm({
     } finally {
       setCepLoading(false);
     }
+    fetchShippingOptions(digits);
   }
+
+  // CEP já vem preenchido (endereço salvo do cliente) — cota uma vez ao montar.
+  useEffect(() => {
+    const digits = form.cep.replace(/\D/g, "");
+    if (digits.length === 8) fetchShippingOptions(digits);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleApplyCoupon() {
     if (!couponInput.trim()) return;
@@ -107,13 +140,19 @@ export function CheckoutForm({
     setCouponError(null);
   }
 
+  const selectedShipping = shippingOptions.find((o) => o.serviceId === selectedShippingId);
   const freeByThreshold = freeShippingThresholdCents != null && subtotalCents >= freeShippingThresholdCents;
-  const shippingCents = applied?.freeShipping || freeByThreshold ? 0 : flatShippingCents;
+  const baseShippingCents = shippingApplicable ? selectedShipping?.priceCents ?? 0 : flatShippingCents;
+  const shippingCents = applied?.freeShipping || freeByThreshold ? 0 : baseShippingCents;
   const discountCents = applied?.discountCents ?? 0;
   const totalCents = subtotalCents - discountCents + shippingCents;
 
   async function handleSubmit() {
     setError(null);
+    if (shippingApplicable && !selectedShippingId) {
+      setError("Selecione uma opção de frete.");
+      return;
+    }
     setSaving(true);
     const res = await createOrderAction({
       address: {
@@ -126,11 +165,14 @@ export function CheckoutForm({
         state: form.state,
       },
       couponCode: applied?.code,
+      shippingServiceId: shippingApplicable ? selectedShippingId ?? undefined : undefined,
     });
     if (res.ok) {
       // Navegação dura: mesmo padrão já usado em login/produto — garante que
       // a página do pedido releia o estado novo (carrinho vazio) do servidor.
-      window.location.href = `${base}/pedido/${res.orderId}`;
+      // Com Stripe configurado, res.redirectUrl manda pro Checkout hospedado
+      // antes de voltar pro pedido; sem gateway, vai direto pro pedido.
+      window.location.href = res.redirectUrl ?? `${base}/pedido/${res.orderId}`;
       return;
     }
     setSaving(false);
@@ -222,6 +264,42 @@ export function CheckoutForm({
         </div>
       </section>
 
+      {shippingApplicable && (
+        <section className="mt-6 rounded-lg border border-stone-200 bg-white p-4">
+          <h2 className="text-sm font-medium text-stone-500">Frete</h2>
+          {shippingLoading ? (
+            <p className="mt-2 text-sm text-stone-400">Calculando opções de frete…</p>
+          ) : (
+            <ul className="mt-2 space-y-2">
+              {shippingOptions.map((opt) => (
+                <li key={opt.serviceId}>
+                  <label className="flex cursor-pointer items-center justify-between rounded-lg border border-stone-200 p-3 text-sm has-[:checked]:border-stone-900">
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="shipping"
+                        checked={selectedShippingId === opt.serviceId}
+                        onChange={() => setSelectedShippingId(opt.serviceId)}
+                      />
+                      <span>
+                        {opt.name} — {opt.company}
+                        <span className="block text-xs text-stone-400">
+                          {opt.deliveryDays} dia{opt.deliveryDays === 1 ? "" : "s"} úteis
+                        </span>
+                      </span>
+                    </span>
+                    <span className="tabular-nums font-medium">{formatBRL(opt.priceCents)}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+      {shippingError && (
+        <p className="mt-2 text-sm text-amber-600">{shippingError} Usando o frete padrão da loja.</p>
+      )}
+
       <section className="mt-6 rounded-lg border border-stone-200 bg-white p-4">
         <h2 className="text-sm font-medium text-stone-500">Cupom</h2>
         {applied ? (
@@ -268,7 +346,13 @@ export function CheckoutForm({
           )}
           <div className="flex justify-between">
             <dt className="text-stone-500">Frete</dt>
-            <dd className="tabular-nums">{shippingCents === 0 ? "Grátis" : formatBRL(shippingCents)}</dd>
+            <dd className="tabular-nums">
+              {shippingApplicable && !selectedShipping
+                ? "Selecione uma opção"
+                : shippingCents === 0
+                  ? "Grátis"
+                  : formatBRL(shippingCents)}
+            </dd>
           </div>
           <div className="flex justify-between border-t border-stone-100 pt-1 font-medium">
             <dt>Total</dt>

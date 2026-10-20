@@ -7,6 +7,10 @@ import { currentCustomer } from "@/lib/customer";
 import { prisma } from "@/lib/prisma";
 import { formatBRL } from "@/lib/format";
 import { OrderStepper } from "./order-stepper";
+import { CancelOrderButton } from "./cancel-order-button";
+
+const CANCELABLE_STATUSES = ["awaiting_payment", "paid"];
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 const PAYMENT_STATUS_LABEL: Record<string, string> = {
   pending: "Pendente",
@@ -78,6 +82,12 @@ export default async function PedidoPage({
 
       <div className="mt-6 rounded-lg border border-stone-200 bg-white p-4">
         <OrderStepper status={order.fulfillmentStatus} madeToOrder={order.madeToOrder} />
+        {CANCELABLE_STATUSES.includes(order.fulfillmentStatus) && (
+          <CancelOrderButton
+            orderId={order.id}
+            withinWindow={Date.now() - order.createdAt.getTime() <= SEVEN_DAYS_MS}
+          />
+        )}
       </div>
 
       <section className="mt-6 rounded-lg border border-stone-200 bg-white p-4">
@@ -147,7 +157,7 @@ export default async function PedidoPage({
             </div>
           )}
           <div className="flex justify-between">
-            <dt className="text-stone-500">Frete</dt>
+            <dt className="text-stone-500">Frete{order.shippingServiceName && ` (${order.shippingServiceName})`}</dt>
             <dd className="tabular-nums">{formatBRL(order.shippingCents)}</dd>
           </div>
           <div className="flex justify-between font-medium">

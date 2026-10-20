@@ -10,6 +10,11 @@ import { r2Url } from "@/lib/r2";
 import { markOrderPaidFormAction } from "@/app/admin/actions/orders";
 import { MANUAL_PAYMENT_METHODS, MANUAL_PAYMENT_METHOD_LABEL } from "@/lib/payment-methods";
 import { OrderStepper } from "@/app/loja/[slug]/pedido/[id]/order-stepper";
+import { CancelOrderButton } from "./cancel-order-button";
+import { GenerateLabelButton } from "./generate-label-button";
+import { DownloadLabelButton } from "./download-label-button";
+
+const CANCELABLE_STATUSES = ["awaiting_payment", "paid"];
 
 const PAYMENT_STATUS_LABEL: Record<string, string> = {
   pending: "Pendente",
@@ -80,6 +85,7 @@ export default async function PedidoAdminPage({
 
       <div className="mt-6 rounded-lg border border-neutral-200 bg-white p-4">
         <OrderStepper status={order.fulfillmentStatus} madeToOrder={order.madeToOrder} />
+        {CANCELABLE_STATUSES.includes(order.fulfillmentStatus) && <CancelOrderButton orderId={order.id} />}
       </div>
 
       <section className="mt-6 rounded-lg border border-neutral-200 p-4">
@@ -122,10 +128,16 @@ export default async function PedidoAdminPage({
         ) : (
           <p className="mt-2 text-sm text-neutral-400">Endereço não informado.</p>
         )}
-        {order.trackingCode && (
-          <p className="mt-3 text-sm text-neutral-700">
-            <span className="text-neutral-500">Rastreio:</span> {order.trackingCode}
-          </p>
+        {order.trackingCode ? (
+          <div className="mt-3 text-sm text-neutral-700">
+            <p>
+              <span className="text-neutral-500">Rastreio:</span> {order.trackingCode}
+            </p>
+            <DownloadLabelButton orderId={order.id} />
+          </div>
+        ) : (
+          order.paymentStatus === "approved" &&
+          order.shippingServiceId && <GenerateLabelButton orderId={order.id} />
         )}
       </section>
 
@@ -217,7 +229,7 @@ export default async function PedidoAdminPage({
             </div>
           )}
           <div className="flex justify-between">
-            <dt className="text-neutral-500">Frete</dt>
+            <dt className="text-neutral-500">Frete{order.shippingServiceName && ` (${order.shippingServiceName})`}</dt>
             <dd className="tabular-nums">{formatBRL(order.shippingCents)}</dd>
           </div>
           <div className="flex justify-between font-medium">
